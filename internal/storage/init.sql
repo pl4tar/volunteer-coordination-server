@@ -1,4 +1,3 @@
--- init.sql
 -- Миграция для чистой PostgreSQL-базы (без PostGIS)
 -- Внимание: запускать как суперпользователь или роль с достаточными правами.
 -- BEGIN/COMMIT для атомарности (можно убрать если планируете частями)
@@ -28,33 +27,34 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 -------------------------
 -- 3. Типы ENUM
 -------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role_t') THEN
 CREATE TYPE user_role_t AS ENUM ('volunteer', 'organizer', 'admin');
+END IF;
 
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'event_status_t') THEN
 CREATE TYPE event_status_t AS ENUM (
-  'draft',
-  'pending_moderation',
-  'active',
-  'cancelled',
-  'finished',
-  'rejected'
-);
+      'draft','pending_moderation','active','cancelled','finished','rejected'
+    );
+END IF;
 
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'registration_status_t') THEN
 CREATE TYPE registration_status_t AS ENUM (
-  'applied',
-  'confirmed',
-  'rejected',
-  'cancelled',
-  'attended',
-  'no_show'
-);
+      'applied','confirmed','rejected','cancelled','attended','no_show'
+    );
+END IF;
 
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'event_importance_t') THEN
 CREATE TYPE event_importance_t AS ENUM ('low','medium','high','critical');
+END IF;
+END$$;
 
 -------------------------
 -- 4. Таблицы: пользователи, сессии, роли
 -------------------------
-CREATE TABLE users (
-                       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE IF NOT EXISTS users (
+                       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                        email CITEXT UNIQUE NOT NULL,
                        password_hash TEXT NOT NULL,
                        full_name TEXT,
@@ -62,23 +62,18 @@ CREATE TABLE users (
                        bio TEXT,
                        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                       is_blocked BOOLEAN NOT NULL DEFAULT FALSE,
-                       is_email_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
-                       email_confirm_token UUID DEFAULT gen_random_uuid(),
-                       last_seen_at TIMESTAMPTZ,
-                       preferred_language TEXT,
-                       metadata JSONB DEFAULT '{}'   -- extensible
+                       is_blocked BOOLEAN NOT NULL DEFAULT FALSE
 );
 
-CREATE TABLE user_roles (
+CREATE TABLE IF NOT EXISTS user_roles (
                             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                             role user_role_t NOT NULL,
                             granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                             PRIMARY KEY (user_id, role)
 );
 
-CREATE TABLE user_sessions (
-                               id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE IF NOT EXISTS user_sessions (
+                               id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                                refresh_token TEXT UNIQUE NOT NULL,
                                user_agent TEXT,
@@ -87,8 +82,8 @@ CREATE TABLE user_sessions (
                                expires_at TIMESTAMPTZ
 );
 
-CREATE TABLE organizer_verifications (
-                                         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE IF NOT EXISTS organizer_verifications (
+                                         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                                          user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                                          company_name TEXT,
                                          documents JSONB,
@@ -101,7 +96,7 @@ CREATE TABLE organizer_verifications (
 -------------------------
 -- 5. Категории, теги, модерация
 -------------------------
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
                             id SERIAL PRIMARY KEY,
                             name TEXT NOT NULL UNIQUE,
                             slug TEXT NOT NULL UNIQUE,
@@ -109,13 +104,13 @@ CREATE TABLE categories (
                             created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE tags (
+CREATE TABLE IF NOT EXISTS tags (
                       id SERIAL PRIMARY KEY,
                       name TEXT NOT NULL UNIQUE
 );
 
-CREATE TABLE moderation_logs (
-                                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE IF NOT EXISTS moderation_logs (
+                                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                                  object_type TEXT NOT NULL,  -- e.g. 'event','user'
                                  object_id UUID,
                                  action TEXT NOT NULL,
@@ -126,10 +121,10 @@ CREATE TABLE moderation_logs (
 
 -------------------------
 -- 6. События (events)
--- Без PostGIS: храним location как TEXT и координаты как numeric (опционально)
+-- храним location как TEXT и координаты как numeric (опционально)
 -------------------------
-CREATE TABLE events (
-                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE IF NOT EXISTS events (
+                        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                         organizer_id UUID REFERENCES users(id) ON DELETE SET NULL,
                         title TEXT NOT NULL,
                         short_description TEXT,
@@ -157,7 +152,7 @@ CREATE TABLE events (
 -------------------------
 -- 7. Теги для мероприятий (many-to-many)
 -------------------------
-CREATE TABLE event_tags (
+CREATE TABLE IF NOT EXISTS event_tags (
                             event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
                             tag_id INT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
                             PRIMARY KEY (event_id, tag_id)
@@ -166,8 +161,8 @@ CREATE TABLE event_tags (
 -------------------------
 -- 8. Регистрации / участники
 -------------------------
-CREATE TABLE registrations (
-                               id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE IF NOT EXISTS registrations (
+                               id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                                event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
                                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                                status registration_status_t NOT NULL DEFAULT 'applied',
@@ -181,8 +176,8 @@ CREATE TABLE registrations (
 -------------------------
 -- 9. Отзывы и рейтинги
 -------------------------
-CREATE TABLE reviews (
-                         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE IF NOT EXISTS reviews (
+                         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                          event_id UUID REFERENCES events(id) ON DELETE CASCADE,
                          author_id UUID REFERENCES users(id) ON DELETE SET NULL,
                          rating SMALLINT NOT NULL CHECK (rating >= 1 AND rating <= 5),
@@ -193,7 +188,7 @@ CREATE TABLE reviews (
                          moderated_at TIMESTAMPTZ
 );
 
-CREATE TABLE user_ratings (
+CREATE TABLE IF NOT EXISTS user_ratings (
                               user_id UUID PRIMARY KEY REFERENCES users(id),
                               rating_score NUMERIC(8,4) NOT NULL DEFAULT 0,
                               rating_count INT NOT NULL DEFAULT 0,
@@ -203,8 +198,8 @@ CREATE TABLE user_ratings (
 -------------------------
 -- 10. Уведомления
 -------------------------
-CREATE TABLE notifications (
-                               id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE IF NOT EXISTS notifications (
+                               id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
                                event_id UUID REFERENCES events(id),
                                type TEXT NOT NULL,
@@ -216,6 +211,8 @@ CREATE TABLE notifications (
 -------------------------
 -- 11. Materialized view: системная статистика
 -------------------------
+DROP MATERIALIZED VIEW IF EXISTS mv_system_stats;
+
 CREATE MATERIALIZED VIEW mv_system_stats AS
 SELECT
     (SELECT COUNT(*) FROM users) AS total_users,
@@ -263,7 +260,7 @@ RETURNS VOID AS $$
 DECLARE
 nid UUID;
 BEGIN
-  nid := gen_random_uuid();
+  nid := uuid_generate_v4();
 INSERT INTO notifications(id, user_id, event_id, type, payload, created_at)
 VALUES (nid, p_user_id, p_event_id, p_type, p_payload, now());
 
@@ -311,11 +308,11 @@ END IF;
     RETURN;
 END IF;
 
-  sid := gen_random_uuid();
+  sid := uuid_generate_v4();
   expires := now() + COALESCE(p_session_ttl, '30 days'::interval);
 
 INSERT INTO user_sessions(id, user_id, refresh_token, user_agent, ip_address, created_at, expires_at)
-VALUES (sid, uid, gen_random_uuid()::text, p_user_agent, p_ip, now(), expires);
+VALUES (sid, uid, uuid_generate_v4()::text, p_user_agent, p_ip, now(), expires);
 
 RETURN QUERY SELECT uid, sid, expires;
 END;
@@ -396,18 +393,20 @@ $$ LANGUAGE plpgsql;
 -- 14. Триггеры
 -------------------------
 -- updated_at для users, events, registrations
+DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
 CREATE TRIGGER trg_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION trigger_update_timestamp();
 
+DROP TRIGGER IF EXISTS trg_events_updated_at ON events;
 CREATE TRIGGER trg_events_updated_at
     BEFORE UPDATE ON events
     FOR EACH ROW EXECUTE FUNCTION trigger_update_timestamp();
 
+DROP TRIGGER IF EXISTS trg_registrations_updated_at ON registrations;
 CREATE TRIGGER trg_registrations_updated_at
     BEFORE UPDATE ON registrations
-    FOR EACH ROW
-    EXECUTE FUNCTION trigger_update_timestamp();
+    FOR EACH ROW EXECUTE FUNCTION trigger_update_timestamp();
 
 -- tsvector: обновление location_text_search в events (title + short_description + full_description)
 CREATE OR REPLACE FUNCTION events_tsvector_update() RETURNS trigger AS $$
@@ -418,8 +417,11 @@ RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_events_tsvector BEFORE INSERT OR UPDATE ON events
-                                                        FOR EACH ROW EXECUTE FUNCTION events_tsvector_update();
+DROP TRIGGER IF EXISTS trg_events_tsvector ON events;
+CREATE TRIGGER trg_events_tsvector
+    BEFORE INSERT OR UPDATE ON events
+    FOR EACH ROW EXECUTE FUNCTION events_tsvector_update();
+
 
 -- Поддержание participants_count в events (пересчитываем при изменениях регистраций)
 CREATE OR REPLACE FUNCTION update_event_participants_count()
@@ -445,9 +447,11 @@ END IF;
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_registrations_participants_count ON registrations;
 CREATE TRIGGER trg_registrations_participants_count
     AFTER INSERT OR UPDATE OR DELETE ON registrations
     FOR EACH ROW EXECUTE FUNCTION update_event_participants_count();
+
 
 -- Пересчёт рейтинга после изменения reviews
 CREATE OR REPLACE FUNCTION trg_reviews_recalc()
@@ -462,31 +466,30 @@ RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_reviews_after_change ON reviews;
 CREATE TRIGGER trg_reviews_after_change
     AFTER INSERT OR UPDATE OR DELETE ON reviews
     FOR EACH ROW EXECUTE FUNCTION trg_reviews_recalc();
+
 
 -------------------------
 -- 15. Индексы и GIN / GIST / TRGM
 -------------------------
 -- users
-CREATE INDEX idx_users_lastseen ON users(last_seen_at);
+-- CREATE INDEX idx_users_lastseen ON users(last_seen_at);
 
 -- events: статусы, даты, категории
-CREATE INDEX idx_events_status_starts ON events(status, starts_at);
-CREATE INDEX idx_events_category ON events(category_id);
-CREATE INDEX idx_events_importance ON events(importance);
-
+CREATE INDEX IF NOT EXISTS idx_events_status_starts ON events(status, starts_at);
+CREATE INDEX IF NOT EXISTS idx_events_category ON events(category_id);
+CREATE INDEX IF NOT EXISTS idx_events_importance ON events(importance);
 -- tsvector индекс
-CREATE INDEX idx_events_fts ON events USING GIN (location_text_search);
-
+CREATE INDEX IF NOT EXISTS idx_events_fts ON events USING GIN (location_text_search);
 -- address trigram для быстрого LIKE
-CREATE INDEX idx_events_address_trgm ON events USING GIN (address gin_trgm_ops);
-
+CREATE INDEX IF NOT EXISTS idx_events_address_trgm ON events USING GIN (address gin_trgm_ops);
 -- fast lookup
-CREATE INDEX idx_registrations_event ON registrations(event_id);
-CREATE INDEX idx_registrations_user ON registrations(user_id);
-CREATE INDEX idx_reviews_event ON reviews(event_id);
+CREATE INDEX IF NOT EXISTS idx_registrations_event ON registrations(event_id);
+CREATE INDEX IF NOT EXISTS idx_registrations_user ON registrations(user_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_event ON reviews(event_id);
 
 -------------------------
 -- 16. Примеры GRANT (рекомендуется настраивать роли в production)
@@ -513,16 +516,5 @@ GRANT SELECT ON TABLE users, events, categories, tags, event_tags, registrations
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users, events, categories, tags, event_tags, registrations, reviews, notifications, user_ratings TO app_writer;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO app_migrator;
 
--------------------------
--- 17. Доп. замечания и данные по умолчанию
--------------------------
--- Добавим администратора-заглушку (опционально)
--- INSERT INTO users (id, email, password_hash, full_name, is_email_confirmed)
--- VALUES (gen_random_uuid(),'admin@example.com', crypt('admin_password', gen_salt('bf')), 'System Admin', true);
-
--------------------------
--- 18. Завершение
--------------------------
 COMMIT;
 
--- Конец init.sql
