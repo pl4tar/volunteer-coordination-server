@@ -54,69 +54,69 @@ END$$;
 -- 4. Таблицы: пользователи, сессии, роли
 -------------------------
 CREATE TABLE IF NOT EXISTS users (
-                       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                       email CITEXT UNIQUE NOT NULL,
-                       password_hash TEXT NOT NULL,
-                       full_name TEXT,
-                       phone TEXT,
-                       bio TEXT,
-                       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                       updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                       is_blocked BOOLEAN NOT NULL DEFAULT FALSE
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email CITEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    full_name TEXT,
+    phone TEXT,
+    bio TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    is_blocked BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS user_roles (
-                            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                            role user_role_t NOT NULL,
-                            granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                            PRIMARY KEY (user_id, role)
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role user_role_t NOT NULL,
+    granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, role)
 );
 
 CREATE TABLE IF NOT EXISTS user_sessions (
-                               id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                               user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                               refresh_token TEXT UNIQUE NOT NULL,
-                               user_agent TEXT,
-                               ip_address INET,
-                               created_at TIMESTAMPTZ DEFAULT now(),
-                               expires_at TIMESTAMPTZ
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    refresh_token TEXT UNIQUE NOT NULL,
+    user_agent TEXT,
+    ip_address INET,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    expires_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS organizer_verifications (
-                                         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                                         user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                                         company_name TEXT,
-                                         documents JSONB,
-                                         status TEXT NOT NULL DEFAULT 'pending',
-                                         reviewed_by UUID REFERENCES users(id),
-                                         reviewed_at TIMESTAMPTZ,
-                                         created_at TIMESTAMPTZ DEFAULT now()
+                                                       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    company_name TEXT,
+    documents JSONB,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by UUID REFERENCES users(id),
+    reviewed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -------------------------
 -- 5. Категории, теги, модерация
 -------------------------
 CREATE TABLE IF NOT EXISTS categories (
-                            id SERIAL PRIMARY KEY,
-                            name TEXT NOT NULL UNIQUE,
-                            slug TEXT NOT NULL UNIQUE,
-                            description TEXT,
-                            created_at TIMESTAMPTZ DEFAULT now()
+                                          id SERIAL PRIMARY KEY,
+                                          name TEXT NOT NULL UNIQUE,
+                                          slug TEXT NOT NULL UNIQUE,
+                                          description TEXT,
+                                          created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS tags (
-                      id SERIAL PRIMARY KEY,
-                      name TEXT NOT NULL UNIQUE
+                                    id SERIAL PRIMARY KEY,
+                                    name TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS moderation_logs (
-                                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                                 object_type TEXT NOT NULL,  -- e.g. 'event','user'
-                                 object_id UUID,
-                                 action TEXT NOT NULL,
-                                 details JSONB,
-                                 performed_by UUID REFERENCES users(id),
-                                 performed_at TIMESTAMPTZ DEFAULT now()
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    object_type TEXT NOT NULL,  -- e.g. 'event','user'
+    object_id UUID,
+    action TEXT NOT NULL,
+    details JSONB,
+    performed_by UUID REFERENCES users(id),
+    performed_at TIMESTAMPTZ DEFAULT now()
 );
 
 -------------------------
@@ -124,89 +124,89 @@ CREATE TABLE IF NOT EXISTS moderation_logs (
 -- храним location как TEXT и координаты как numeric (опционально)
 -------------------------
 CREATE TABLE IF NOT EXISTS events (
-                        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                        organizer_id UUID REFERENCES users(id) ON DELETE SET NULL,
-                        title TEXT NOT NULL,
-                        short_description TEXT,
-                        full_description TEXT,
-                        category_id INT REFERENCES categories(id),
-                        importance event_importance_t NOT NULL DEFAULT 'medium',
-                        status event_status_t NOT NULL DEFAULT 'draft',
-                        capacity INT,
-                        participants_count INT NOT NULL DEFAULT 0,
-                        starts_at TIMESTAMPTZ,
-                        ends_at TIMESTAMPTZ,
-                        created_at TIMESTAMPTZ DEFAULT now(),
-                        updated_at TIMESTAMPTZ DEFAULT now(),
-                        address TEXT,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organizer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    short_description TEXT,
+    full_description TEXT,
+    category_id INT REFERENCES categories(id),
+    importance event_importance_t NOT NULL DEFAULT 'medium',
+    status event_status_t NOT NULL DEFAULT 'draft',
+    capacity INT,
+    participants_count INT NOT NULL DEFAULT 0,
+    starts_at TIMESTAMPTZ,
+    ends_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    address TEXT,
     -- optional lat/lon for simple geo (no PostGIS)
-                        latitude NUMERIC(10,6),
-                        longitude NUMERIC(10,6),
-                        location_text_search TSVECTOR,
-                        extra JSONB DEFAULT '{}',
-                        moderated_by UUID REFERENCES users(id),
-                        moderated_at TIMESTAMPTZ,
-                        deleted_at TIMESTAMPTZ
-);
+    latitude NUMERIC(10,6),
+    longitude NUMERIC(10,6),
+    location_text_search TSVECTOR,
+    extra JSONB DEFAULT '{}',
+    moderated_by UUID REFERENCES users(id),
+    moderated_at TIMESTAMPTZ,
+    deleted_at TIMESTAMPTZ
+    );
 
 -------------------------
 -- 7. Теги для мероприятий (many-to-many)
 -------------------------
 CREATE TABLE IF NOT EXISTS event_tags (
-                            event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-                            tag_id INT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-                            PRIMARY KEY (event_id, tag_id)
-);
+    event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    tag_id INT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (event_id, tag_id)
+    );
 
 -------------------------
 -- 8. Регистрации / участники
 -------------------------
 CREATE TABLE IF NOT EXISTS registrations (
-                               id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                               event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-                               user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                               status registration_status_t NOT NULL DEFAULT 'applied',
-                               applied_at TIMESTAMPTZ DEFAULT now(),
-                               updated_at TIMESTAMPTZ DEFAULT now(),
-                               comment TEXT,
-                               seat_number INT,
-                               UNIQUE (event_id, user_id)
-);
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status registration_status_t NOT NULL DEFAULT 'applied',
+    applied_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    comment TEXT,
+    seat_number INT,
+    UNIQUE (event_id, user_id)
+    );
 
 -------------------------
 -- 9. Отзывы и рейтинги
 -------------------------
 CREATE TABLE IF NOT EXISTS reviews (
-                         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                         event_id UUID REFERENCES events(id) ON DELETE CASCADE,
-                         author_id UUID REFERENCES users(id) ON DELETE SET NULL,
-                         rating SMALLINT NOT NULL CHECK (rating >= 1 AND rating <= 5),
-                         comment TEXT,
-                         created_at TIMESTAMPTZ DEFAULT now(),
-                         is_visible BOOLEAN DEFAULT TRUE,
-                         moderated_by UUID REFERENCES users(id),
-                         moderated_at TIMESTAMPTZ
-);
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id UUID REFERENCES events(id) ON DELETE CASCADE,
+    author_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    rating SMALLINT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    comment TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    is_visible BOOLEAN DEFAULT TRUE,
+    moderated_by UUID REFERENCES users(id),
+    moderated_at TIMESTAMPTZ
+    );
 
 CREATE TABLE IF NOT EXISTS user_ratings (
-                              user_id UUID PRIMARY KEY REFERENCES users(id),
-                              rating_score NUMERIC(8,4) NOT NULL DEFAULT 0,
-                              rating_count INT NOT NULL DEFAULT 0,
-                              last_updated TIMESTAMPTZ DEFAULT now()
-);
+                                            user_id UUID PRIMARY KEY REFERENCES users(id),
+    rating_score NUMERIC(8,4) NOT NULL DEFAULT 0,
+    rating_count INT NOT NULL DEFAULT 0,
+    last_updated TIMESTAMPTZ DEFAULT now()
+    );
 
 -------------------------
 -- 10. Уведомления
 -------------------------
 CREATE TABLE IF NOT EXISTS notifications (
-                               id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                               user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                               event_id UUID REFERENCES events(id),
-                               type TEXT NOT NULL,
-                               payload JSONB,
-                               is_read BOOLEAN DEFAULT FALSE,
-                               created_at TIMESTAMPTZ DEFAULT now()
-);
+                                             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    event_id UUID REFERENCES events(id),
+    type TEXT NOT NULL,
+    payload JSONB,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT now()
+    );
 
 -------------------------
 -- 11. Materialized view: системная статистика
@@ -273,16 +273,14 @@ $$ LANGUAGE plpgsql;
 -------------------------
 -- 13. Функции: регистрация, аутентификация, управление заявками
 -------------------------
--- Создание пользователя (с хэшем пароля bcrypt)
-CREATE OR REPLACE FUNCTION create_user(p_email TEXT, p_password TEXT, p_full_name TEXT)
+-- Создание пользователя (принимает уже хэшированный пароль)
+CREATE OR REPLACE FUNCTION create_user(p_email TEXT, p_password_hash TEXT, p_full_name TEXT)
 RETURNS UUID AS $$
 DECLARE
 uid UUID;
-  hashed TEXT;
 BEGIN
-  hashed := crypt(p_password, gen_salt('bf'));
 INSERT INTO users(email, password_hash, full_name, created_at, updated_at)
-VALUES (lower(p_email), hashed, p_full_name, now(), now())
+VALUES (lower(p_email), p_password_hash, p_full_name, now(), now())
     RETURNING id INTO uid;
 RETURN uid;
 EXCEPTION WHEN unique_violation THEN
@@ -290,24 +288,30 @@ EXCEPTION WHEN unique_violation THEN
 END;
 $$ LANGUAGE plpgsql;
 
--- Авторизация + сессия
-CREATE OR REPLACE FUNCTION authenticate_user(p_email TEXT, p_password TEXT, p_user_agent TEXT, p_ip INET, p_session_ttl INTERVAL)
+-- Авторизация (проверяет уже хэшированный пароль)
+CREATE OR REPLACE FUNCTION authenticate_user(p_email TEXT, p_password_hash TEXT, p_user_agent TEXT, p_ip INET, p_session_ttl INTERVAL)
 RETURNS TABLE (user_id UUID, session_id UUID, expires_at TIMESTAMPTZ) AS $$
 DECLARE
 uid UUID;
-  pass_hash TEXT;
+  stored_hash TEXT;
   sid UUID;
   expires TIMESTAMPTZ;
 BEGIN
-SELECT id, password_hash INTO uid, pass_hash FROM users WHERE email = lower(p_email) AND NOT is_blocked;
+  -- Получаем пользователя и хэш пароля
+SELECT id, password_hash INTO uid, stored_hash
+FROM users
+WHERE email = lower(p_email) AND NOT is_blocked;
+
 IF NOT FOUND THEN
     RETURN;
 END IF;
 
-  IF pass_hash IS NULL OR crypt(p_password, pass_hash) <> pass_hash THEN
+  -- Сравниваем хэши (без crypt, просто сравнение строк)
+  IF stored_hash IS NULL OR stored_hash != p_password_hash THEN
     RETURN;
 END IF;
 
+  -- Создаем сессию
   sid := uuid_generate_v4();
   expires := now() + COALESCE(p_session_ttl, '30 days'::interval);
 
@@ -332,8 +336,12 @@ VALUES (p_event_id, p_user_id, 'applied', now(), p_comment)
     ON CONFLICT (event_id, user_id) DO UPDATE
                                            SET status = 'applied', updated_at = now(), comment = EXCLUDED.comment;
 
-PERFORM send_notification((SELECT organizer_id FROM events WHERE id = p_event_id), p_event_id, 'new_application',
-    json_build_object('applicant_id', p_user_id, 'comment', p_comment));
+PERFORM send_notification(
+    (SELECT organizer_id FROM events WHERE id = p_event_id),
+    p_event_id,
+    'new_application',
+    json_build_object('applicant_id', p_user_id, 'comment', p_comment)
+  );
 END;
 $$ LANGUAGE plpgsql;
 
@@ -344,8 +352,12 @@ BEGIN
 UPDATE registrations SET status = 'cancelled', updated_at = now()
 WHERE event_id = p_event_id AND user_id = p_user_id;
 
-PERFORM send_notification((SELECT organizer_id FROM events WHERE id = p_event_id), p_event_id, 'application_cancelled',
-    json_build_object('applicant_id', p_user_id));
+PERFORM send_notification(
+    (SELECT organizer_id FROM events WHERE id = p_event_id),
+    p_event_id,
+    'application_cancelled',
+    json_build_object('applicant_id', p_user_id)
+  );
 END;
 $$ LANGUAGE plpgsql;
 
@@ -364,8 +376,12 @@ END IF;
 UPDATE registrations SET status = new_status, updated_at = now()
 WHERE event_id = p_event_id AND user_id = p_user_id;
 
-PERFORM send_notification(p_user_id, p_event_id, 'registration_' || new_status::text,
-    json_build_object('event_id', p_event_id, 'by', p_by_user));
+PERFORM send_notification(
+    p_user_id,
+    p_event_id,
+    'registration_' || new_status::text,
+    json_build_object('event_id', p_event_id, 'by', p_by_user)
+  );
 END;
 $$ LANGUAGE plpgsql;
 
@@ -384,8 +400,12 @@ END IF;
 INSERT INTO moderation_logs(object_type, object_id, action, details, performed_by, performed_at)
 VALUES ('event', p_event_id, p_action, json_build_object('reason', p_reason), p_admin_id, now());
 
-PERFORM send_notification((SELECT organizer_id FROM events WHERE id = p_event_id), p_event_id, 'moderation_' || p_action,
-    json_build_object('reason', p_reason));
+PERFORM send_notification(
+    (SELECT organizer_id FROM events WHERE id = p_event_id),
+    p_event_id,
+    'moderation_' || p_action,
+    json_build_object('reason', p_reason)
+  );
 END;
 $$ LANGUAGE plpgsql;
 
@@ -420,7 +440,7 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trg_events_tsvector ON events;
 CREATE TRIGGER trg_events_tsvector
     BEFORE INSERT OR UPDATE ON events
-    FOR EACH ROW EXECUTE FUNCTION events_tsvector_update();
+                         FOR EACH ROW EXECUTE FUNCTION events_tsvector_update();
 
 
 -- Поддержание participants_count в events (пересчитываем при изменениях регистраций)
@@ -517,4 +537,3 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users, events, categories, tags, e
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO app_migrator;
 
 COMMIT;
-

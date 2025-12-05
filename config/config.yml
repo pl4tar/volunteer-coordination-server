@@ -1,0 +1,11 @@
+http:
+  port: 4949
+  readTimeout: 10s
+  writeTimeout: 10s
+
+cache:
+  ttl: 3600s
+
+auth:
+  accessToken: 120m
+  refreshToken: 43200m

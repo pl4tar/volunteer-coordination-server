@@ -15,7 +15,7 @@ type Env struct {
 	DB_PORT     int    `env:"DB_PORT"`
 	DB_HOST     string `env:"DB_HOST"`
 	IpAddress   string `env:"IP_ADDRESS"`
-	API_PORT    int    `env:"API_PORT"`
+	API_PORT    string `env:"API_PORT"`
 }
 
 type Config struct {
