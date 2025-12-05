@@ -2,43 +2,68 @@ package router
 
 import (
 	"context"
+	"fmt"
+	"time"
+	v1 "volunteer-coordination-server/internal/delivery/http/v1"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func SetupRouter(ctx context.Context, db *pgxpool.Pool) *gin.Engine {
-	router := gin.Default()
-
+	r := gin.Default()
+	r.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
+		// your custom format
+		return fmt.Sprintf("%s - [%s] \"%s %s %s %d %s \"%s\" %s\"\n",
+			param.ClientIP,
+			param.TimeStamp.Format(time.RFC1123),
+			param.Method,
+			param.Path,
+			param.Request.Proto,
+			param.StatusCode,
+			param.Latency,
+			param.Request.UserAgent(),
+			param.ErrorMessage,
+		)
+	}))
+	r.Use(gin.Recovery())
 	corsConfig := cors.DefaultConfig()
-	//corsConfig.AllowAllOrigins = true
+	corsConfig.AllowAllOrigins = true
 	corsConfig.AllowOrigins = []string{"*"}
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}
 	corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	corsConfig.AllowCredentials = true
-	//router.Use(cors.New(corsConfig), middleware.MetricsMiddleware())
+	//r.Use(cors.New(corsConfig), middleware.MetricsMiddleware())
 
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	//r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+	r.GET("/ping", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "pong"})
 	})
 
 	//teamHandler := handler.NewTeamHandler(ctx, db)
 	//userHandler := handler.NewUserHandler(ctx, db)
 	//PRHandler := handler.NewPRHandler(ctx, db)
 
-	//api := router.Group("/api")
-	//{
-	//	users := api.Group("/users")
-	//	{
-	//		users.POST("/", userHandler.SetStatus)
-	//		users.GET("/", userHandler.GetUserReviews)
-	//	}
-	//}
+	userHandler := v1.NewUserHandler(ctx, db)
+	api := r.Group("/api/v1")
+	{
+		users := api.Group("/users")
+		{
+			// Получение данных пользователя по id
+			users.GET("/:id", userHandler.UserByUUIDHandler)
 
-	return router
+			//эндпоинты регистрации по ролям
+			register := users.Group("/register")
+			{
+				register.POST("/admins", userHandler.NewAdminUserHandler)
+				register.POST("/volunteers", userHandler.NewVolunteerUserHandler)
+				register.POST("/organizers", userHandler.NewOrganizerUserHandler)
+
+			}
+		}
+	}
+
+	return r
 }
