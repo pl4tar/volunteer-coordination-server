@@ -1,0 +1,32 @@
+package repository
+
+import (
+	"context"
+	"errors"
+	"volunteer-coordination-server/internal/domain"
+
+	"github.com/google/uuid"
+)
+
+var (
+	ErrNotFound      = errors.New("not found")
+	ErrAlreadyExists = errors.New("already exists")
+)
+
+type UserRepository interface {
+	QueryNewUser(ctx context.Context, user domain.UserRegistration) (string, error)
+	QueryGetUserByEmail(ctx context.Context, email string) (domain.User, error)
+	QueryGetUserByID(ctx context.Context, userID uuid.UUID) (domain.User, error)
+}
+
+// SessionRepository интерфейс для работы с сессиями
+type SessionRepository interface {
+	Save(ctx context.Context, session domain.Session) error
+	UpdateUserSession(ctx context.Context, refreshToken string, sessionID uuid.UUID) error
+	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (domain.Session, error)
+	Delete(ctx context.Context, sessionID string) error
+	DeleteByUserID(ctx context.Context, userID string) error
+
+	FindByID(ctx context.Context, id uuid.UUID) (domain.Session, error)
+	DeleteExpired(ctx context.Context) error
+}

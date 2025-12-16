@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"log/slog"
 	"volunteer-coordination-server/internal/domain"
-	"volunteer-coordination-server/internal/repository/UserRepository"
+	"volunteer-coordination-server/internal/repository"
 
 	"github.com/google/uuid"
 )
 
 type UserService struct {
-	userRepo repository.UserRepositoryInterface
+	userRepo repository.UserRepository
 }
 
-func NewUserService(userRepo repository.UserRepositoryInterface) *UserService {
+func NewUserService(userRepo repository.UserRepository) *UserService {
 	return &UserService{
 		userRepo: userRepo,
 	}
