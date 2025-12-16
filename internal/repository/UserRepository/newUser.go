@@ -1,9 +1,9 @@
-package UserRepository
+package repository
 
 import (
 	"context"
 	"log/slog"
-	"volunteer-coordination-server/internal/entity"
+	"volunteer-coordination-server/internal/domain"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -11,9 +11,9 @@ import (
 //Пакет реализует функции создания новых пользователей четко разделенные по ролям
 //TODO доделать добавление био и телефона
 
-// QueryNewUser - создает запись в бд, принимает структуру entity.UserRegistration
+// QueryNewUser - создает запись в бд, принимает структуру domain.UserRegistration
 // Валидация на существующих пользователей реализована на стороне бд
-func (r *UsrRepository) QueryNewUser(ctx context.Context, user entity.UserRegistration) (string, error) {
+func (r *UserRepository) QueryNewUser(ctx context.Context, user domain.UserRegistration) (string, error) {
 	var userID string
 	PasswordHash, _ := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 

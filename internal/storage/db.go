@@ -34,7 +34,7 @@ func CheckAndMigrate(db *pgxpool.Pool) error {
 }
 
 //func InsertTestUser(ctx context.Context, db *pgxpool.Pool) error {
-//	var adminUser = entity.UserRegistration{
+//	var adminUser = domain.UserRegistration{
 //		Email:    "admin@ya.ru",
 //		Password: "123456",
 //		FullName: "admin",
@@ -42,7 +42,7 @@ func CheckAndMigrate(db *pgxpool.Pool) error {
 //	}
 //	_, err := User.QueryNewAdminUser(ctx, db, adminUser)
 //
-//	var volunteerUser = entity.UserRegistration{
+//	var volunteerUser = domain.UserRegistration{
 //		Email:    "volonteer@ya.ru",
 //		Password: "987654321",
 //		FullName: "Vasya Pupkin",

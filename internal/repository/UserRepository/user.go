@@ -1,11 +1,23 @@
-package UserRepository
+package repository
 
-import "github.com/jackc/pgx/v5/pgxpool"
+import (
+	"context"
+	"volunteer-coordination-server/internal/domain"
 
-type UsrRepository struct {
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type UserRepository struct {
 	db *pgxpool.Pool
 }
 
-func NewUsrRepository(db *pgxpool.Pool) *UsrRepository {
-	return &UsrRepository{db: db}
+func NewUserRepository(db *pgxpool.Pool) *UserRepository {
+	return &UserRepository{db: db}
+}
+
+type UserRepositoryInterface interface {
+	QueryNewUser(ctx context.Context, user domain.UserRegistration) (string, error)
+	QueryGetUserByEmail(ctx context.Context, email string) (domain.User, error)
+	QueryGetUserByID(ctx context.Context, userID uuid.UUID) (domain.User, error)
 }
