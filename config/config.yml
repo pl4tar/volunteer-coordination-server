@@ -1,11 +1,20 @@
 http:
-  port: 4949
+  port: "4949"
   readTimeout: 10s
   writeTimeout: 10s
+  host: "localhost"
 
 cache:
   ttl: 3600s
 
 auth:
+  useCookies: false
+  cookieDomain: "localhost"
+  secureCookies: false
+
+jwt:
+  secret: "private_as_fuck"
+  refresh_secret: "pivo_obnovite"
+  issuer: "volunteer-coordination-server"
   accessToken: 120m
   refreshToken: 43200m
