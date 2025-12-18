@@ -1,10 +1,10 @@
-package router
+package http
 
 import (
 	"context"
 	"fmt"
 	"time"
-	v1 "volunteer-coordination-server/internal/delivery/http/v1"
+	v1 "volunteer-coordination-server/internal/handler/http/v1"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -14,7 +14,6 @@ import (
 func SetupRouter(ctx context.Context, db *pgxpool.Pool) *gin.Engine {
 	r := gin.Default()
 	r.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
-		// your custom format
 		return fmt.Sprintf("%s - [%s] \"%s %s %s %d %s \"%s\" %s\"\n",
 			param.ClientIP,
 			param.TimeStamp.Format(time.RFC1123),
@@ -47,20 +46,24 @@ func SetupRouter(ctx context.Context, db *pgxpool.Pool) *gin.Engine {
 	//PRHandler := handler.NewPRHandler(ctx, db)
 
 	userHandler := v1.NewUserHandler(ctx, db)
+
 	api := r.Group("/api/v1")
 	{
 		users := api.Group("/users")
 		{
-			// Получение данных пользователя по id
+			// Получение пользователя по ID
 			users.GET("/:id", userHandler.UserByUUIDHandler)
 
-			//эндпоинты регистрации по ролям
+			// Создание пользователя (универсальный метод)
+			//users.POST("/", userHandler.CreateUserHandler)
+
+			// Для обратной совместимости можно оставить старые маршруты
 			register := users.Group("/register")
 			{
-				register.POST("/admins", userHandler.NewAdminUserHandler)
-				register.POST("/volunteers", userHandler.NewVolunteerUserHandler)
-				register.POST("/organizers", userHandler.NewOrganizerUserHandler)
-
+				// Перенаправляем на универсальный метод
+				register.POST("/admins", userHandler.CreateUserHandler)
+				register.POST("/volunteers", userHandler.CreateUserHandler)
+				register.POST("/organizers", userHandler.CreateUserHandler)
 			}
 		}
 	}

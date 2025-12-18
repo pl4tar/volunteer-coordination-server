@@ -24,15 +24,15 @@ type UserRole struct {
 }
 
 type User struct {
-	ID           uuid.UUID  `json:"id" db:"id"`
-	Email        string     `json:"email" db:"email"`
-	PasswordHash string     `json:"-" db:"password_hash"` // Скрываем в JSON
-	FullName     string     `json:"full_name" db:"full_name"`
-	Phone        string     `json:"phone,omitempty" db:"phone"`
-	Roles        []UserRole `json:"roles,omitempty" db:"-"` // Не маппим напрямую, роли получаем отдельно
-	IsBlocked    bool       `json:"is_blocked,omitempty" db:"is_blocked"`
-	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
+	ID        uuid.UUID  `json:"id" db:"id"`
+	Email     string     `json:"email" db:"email"`
+	Password  string     `json:"-" db:"password_hash"` // Скрываем в JSON
+	FullName  string     `json:"full_name" db:"full_name"`
+	Phone     string     `json:"phone,omitempty" db:"phone"`
+	Roles     []UserRole `json:"roles,omitempty" db:"-"` // Не маппим напрямую, роли получаем отдельно
+	IsBlocked bool       `json:"is_blocked,omitempty" db:"is_blocked"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 type UserRegistration struct {
@@ -43,43 +43,44 @@ type UserRegistration struct {
 	Roles    []string `json:"roles,omitempty"` // Принимаем массив строк для ролей
 }
 
-func NewUser(reg UserRegistration) (*User, error) {
+// NewUser принимает в себя [UserRegistration] и возвращает [User]
+func NewUser(reg UserRegistration) (User, error) {
 	if reg.Email == "" {
-		return nil, ErrInvalidEmail
+		return User{}, ErrInvalidEmail
 	}
 
 	if len(reg.Password) < 6 {
-		return nil, ErrPasswordTooShort
+		return User{}, ErrPasswordTooShort
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(reg.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, err
+		return User{}, err
 	}
 
 	now := time.Now()
-	user := &User{
-		ID:           uuid.New(),
-		Email:        reg.Email,
-		PasswordHash: string(hashedPassword),
-		FullName:     reg.FullName,
-		Phone:        reg.Phone,
-		IsBlocked:    false,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+	user := User{
+		ID:        uuid.New(),
+		Email:     reg.Email,
+		Password:  string(hashedPassword),
+		FullName:  reg.FullName,
+		Phone:     reg.Phone,
+		IsBlocked: false,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	// Добавляем роли (если они указаны)
 	if len(reg.Roles) > 0 {
 		for _, role := range reg.Roles {
 			if err := user.AddRole(role); err != nil {
-				return nil, err
+				return User{}, err
 			}
 		}
 	} else {
 		// По умолчанию добавляем роль volunteer
 		if err := user.AddRole("volunteer"); err != nil {
-			return nil, err
+			return User{}, err
 		}
 	}
 
@@ -88,7 +89,7 @@ func NewUser(reg UserRegistration) (*User, error) {
 
 // AddRole добавляет роль пользователю
 func (u *User) AddRole(role string) error {
-	if !isValidRole(role) {
+	if !IsValidRole(role) {
 		return ErrInvalidRole
 	}
 
@@ -156,7 +157,7 @@ func (u *User) HasAnyRole(roles ...string) bool {
 
 // CheckPassword проверяет пароль
 func (u *User) CheckPassword(password string) error {
-	return bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
+	return bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
 }
 
 // Block блокирует пользователя
@@ -193,12 +194,12 @@ func (u *User) ChangePassword(newPassword string) error {
 		return err
 	}
 
-	u.PasswordHash = string(hashedPassword)
+	u.Password = string(hashedPassword)
 	u.UpdatedAt = time.Now()
 	return nil
 }
 
-func isValidRole(role string) bool {
+func IsValidRole(role string) bool {
 	validRoles := map[string]bool{
 		"volunteer": true,
 		"organizer": true,
