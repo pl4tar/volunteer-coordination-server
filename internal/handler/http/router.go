@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-	v1 "volunteer-coordination-server/internal/handler/http/v1"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -45,28 +44,28 @@ func SetupRouter(ctx context.Context, db *pgxpool.Pool) *gin.Engine {
 	//userHandler := handler.NewUserHandler(ctx, db)
 	//PRHandler := handler.NewPRHandler(ctx, db)
 
-	userHandler := v1.NewUserHandler(ctx, db)
+	//userHandler := v1.NewUserHandler(ctx, db)
 
-	api := r.Group("/api/v1")
-	{
-		users := api.Group("/users")
-		{
-			// Получение пользователя по ID
-			users.GET("/:id", userHandler.UserByUUIDHandler)
+	//api := r.Group("/api/v1")
+	//{
+	//users := api.Group("/users")
+	//{
+	// Получение пользователя по ID
+	//users.GET("/:id", userHandler.UserByUUIDHandler)
 
-			// Создание пользователя (универсальный метод)
-			//users.POST("/", userHandler.CreateUserHandler)
+	// Создание пользователя (универсальный метод)
+	//users.POST("/", userHandler.CreateUserHandler)
 
-			// Для обратной совместимости можно оставить старые маршруты
-			register := users.Group("/register")
-			{
-				// Перенаправляем на универсальный метод
-				register.POST("/admins", userHandler.CreateUserHandler)
-				register.POST("/volunteers", userHandler.CreateUserHandler)
-				register.POST("/organizers", userHandler.CreateUserHandler)
-			}
-		}
-	}
+	// Для обратной совместимости можно оставить старые маршруты
+	//register := users.Group("/register")
+	//{
+	// Перенаправляем на универсальный метод
+	//register.POST("/admins", userHandler.CreateUserHandler)
+	//register.POST("/volunteers", userHandler.CreateUserHandler)
+	//register.POST("/organizers", userHandler.CreateUserHandler)
+	//}
+	//}
+	//}
 
 	return r
 }
