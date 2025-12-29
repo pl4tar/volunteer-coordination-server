@@ -39,7 +39,7 @@ func (r *userRepository) QueryGetUserByEmail(ctx context.Context, email string) 
 		WHERE email = $1
 	`
 
-	var user domain.User
+	user := domain.User{}
 
 	err := r.db.QueryRow(ctx, query, email).Scan(
 		&user.ID,
