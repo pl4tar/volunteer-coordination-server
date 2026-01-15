@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/crypto/bcrypt"
 )
 
 //go:embed init.sql
@@ -24,28 +23,31 @@ func CheckAndMigrate(db *pgxpool.Pool) error {
 		return fmt.Errorf("ошибка проверки количества пользователей в бд: %v", err)
 	}
 
-	if count == 0 {
-		if err = InsertAdminUser(context.Background(), db); err != nil {
-			return fmt.Errorf("ошибка добавления пользователя: %v", err)
-		}
-	}
+	//if count == 0 {
+	//	if err = InsertTestUser(context.Background(), db); err != nil {
+	//		return fmt.Errorf("ошибка добавления пользователя: %v", err)
+	//	}
+	//}
 
 	return nil
 }
 
-func InsertAdminUser(ctx context.Context, db *pgxpool.Pool) error {
-	hash, _ := bcrypt.GenerateFromPassword([]byte("1111"), bcrypt.DefaultCost)
-
-	_, err := db.Exec(
-		context.Background(),
-		`INSERT INTO users (email, password_hash, full_name)
-		VALUES ($1, $2, $3)
-		RETURNING id
-		`,
-		"admin@admin.ru",
-		hash,
-		"admin",
-	)
-
-	return err
-}
+//func InsertTestUser(ctx context.Context, db *pgxpool.Pool) error {
+//	var adminUser = domain.UserRegistration{
+//		Email:    "admin@ya.ru",
+//		Password: "123456",
+//		FullName: "admin",
+//		Role:     "admin",
+//	}
+//	_, err := User.QueryNewAdminUser(ctx, db, adminUser)
+//
+//	var volunteerUser = domain.UserRegistration{
+//		Email:    "volonteer@ya.ru",
+//		Password: "987654321",
+//		FullName: "Vasya Pupkin",
+//		Role:     "volunteer",
+//	}
+//	_, err = User.QueryNewVolunteerUser(ctx, db, volunteerUser)
+//
+//	return err
+//}
