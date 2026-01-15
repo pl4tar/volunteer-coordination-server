@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"volunteer-coordination-server/internal/domain"
 
 	"github.com/google/uuid"
@@ -19,6 +20,106 @@ type userRepository struct {
 
 func NewUserRepository(db *pgxpool.Pool) UserRepository {
 	return &userRepository{db: db}
+}
+
+func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFilter string) ([]domain.User, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	offset := (page - 1) * limit
+
+	// --- COUNT ---
+	var total int64
+
+	countSQL := `
+		SELECT COUNT(DISTINCT u.id)
+		FROM users u
+	`
+	args := []any{}
+	where := []string{}
+
+	// если фильтр по роли — предполагаем таблицу user_roles(user_id, role)
+	// если у тебя таблица иначе называется — поправишь здесь
+	if strings.TrimSpace(roleFilter) != "" {
+		countSQL += ` JOIN user_roles ur ON ur.user_id = u.id `
+		where = append(where, fmt.Sprintf("ur.role = $%d", len(args)+1))
+		args = append(args, roleFilter)
+	}
+
+	if len(where) > 0 {
+		countSQL += " WHERE " + strings.Join(where, " AND ")
+	}
+
+	if err := r.db.QueryRow(ctx, countSQL, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("repository.userRepository.ListUsers count: %w", err)
+	}
+
+	// --- SELECT PAGE ---
+	selectSQL := `
+		SELECT DISTINCT u.id, u.email, u.full_name, u.phone, u.password_hash, u.is_blocked, u.created_at, u.updated_at
+		FROM users u
+	`
+	args2 := []any{}
+	where2 := []string{}
+
+	if strings.TrimSpace(roleFilter) != "" {
+		selectSQL += ` JOIN user_roles ur ON ur.user_id = u.id `
+		where2 = append(where2, fmt.Sprintf("ur.role = $%d", len(args2)+1))
+		args2 = append(args2, roleFilter)
+	}
+
+	if len(where2) > 0 {
+		selectSQL += " WHERE " + strings.Join(where2, " AND ")
+	}
+
+	// pagination
+	selectSQL += fmt.Sprintf(" ORDER BY u.created_at DESC LIMIT $%d OFFSET $%d", len(args2)+1, len(args2)+2)
+	args2 = append(args2, limit, offset)
+
+	rows, err := r.db.Query(ctx, selectSQL, args2...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("repository.userRepository.ListUsers select: %w", err)
+	}
+	defer rows.Close()
+
+	users := make([]domain.User, 0, limit)
+
+	for rows.Next() {
+		var u domain.User
+		// ВАЖНО: поля должны соответствовать твоему domain.User
+		// Если у тебя другие имена/типы — поправь Scan
+		if err := rows.Scan(
+			&u.ID,
+			&u.Email,
+			&u.FullName,
+			&u.Phone,
+			&u.Password,
+			&u.IsBlocked,
+			&u.CreatedAt,
+			&u.UpdatedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("repository.userRepository.ListUsers scan: %w", err)
+		}
+
+		// если у тебя роли вытаскиваются отдельным запросом:
+		roles, err := r.GetUserRoles(ctx, u.ID)
+		if err != nil && err != pgx.ErrNoRows {
+			return nil, 0, fmt.Errorf("repository.userRepository.ListUsers roles: %w", err)
+		}
+		u.Roles = roles
+
+		users = append(users, u)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("repository.userRepository.ListUsers rows: %w", err)
+	}
+
+	return users, total, nil
 }
 
 // QueryGetUserByEmail - получает пользователя из бд по email
@@ -185,7 +286,7 @@ func (r *userRepository) GetUserRoles(ctx context.Context, userID uuid.UUID) ([]
 	return roles, nil
 }
 
-// QueryNewUser - создает запись в бд, принимает структуру [domain.User]
+// Save - создает запись в бд, принимает структуру [domain.User]
 // Валидация на существующих пользователей реализована на стороне бд
 func (r *userRepository) Save(ctx context.Context, user domain.User) (string, error) {
 	var userID string
