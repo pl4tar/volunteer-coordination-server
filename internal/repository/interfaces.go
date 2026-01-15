@@ -19,6 +19,7 @@ type UserRepository interface {
 	QueryGetUserByID(ctx context.Context, userID uuid.UUID) (domain.User, error)
 
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
+	ListUsers(ctx context.Context, page, limit int, roleFilter string) ([]domain.User, int64, error)
 
 	UpdateProfile(ctx context.Context, user domain.User) error
 	UpdatePassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error

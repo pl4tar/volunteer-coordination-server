@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	_ "volunteer-coordination-server/internal/repository/UserRepository"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
