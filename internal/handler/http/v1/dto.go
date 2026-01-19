@@ -18,6 +18,10 @@ type UserResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type SuccessOnlyResponse struct {
+	Success bool `json:"success"`
+}
+
 type RegisterRequest struct {
 	Email    string   `json:"email" binding:"required,email"`
 	Password string   `json:"password" binding:"required,min=6"`

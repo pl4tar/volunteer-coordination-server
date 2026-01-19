@@ -76,9 +76,14 @@ func SetupRouter(_ context.Context, cfg *config.Config, db *pgxpool.Pool) *gin.E
 		{
 			users.GET("/me", userHandler.GetCurrentUser)
 			users.PUT("/me", userHandler.UpdateUser)
+
 			users.PUT("/me/password", userHandler.ChangePassword)
 
+			// Алиас, чтобы /users/password тоже работал (и не попадал в /:id)
+			users.PUT("/password", userHandler.ChangePassword)
+
 			users.GET("", userHandler.GetUsers)
+
 			users.GET("/:id", userHandler.GetUserByID)
 		}
 	}
@@ -88,19 +93,23 @@ func SetupRouter(_ context.Context, cfg *config.Config, db *pgxpool.Pool) *gin.E
 
 func authMiddleware(tokenSvc *service.TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1) cookie
-		tokenStr, _ := c.Cookie("access_token")
+		var tokenStr string
 
-		// 2) fallback: Bearer (для swagger/postman)
-		if strings.TrimSpace(tokenStr) == "" {
+		if v, err := c.Cookie("access_token"); err == nil && v != "" {
+			tokenStr = v
+		}
+
+		if tokenStr == "" {
 			authHeader := c.GetHeader("Authorization")
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-				tokenStr = strings.TrimSpace(parts[1])
+			if authHeader != "" {
+				parts := strings.SplitN(authHeader, " ", 2)
+				if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+					tokenStr = strings.TrimSpace(parts[1])
+				}
 			}
 		}
 
-		if strings.TrimSpace(tokenStr) == "" {
+		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, v1.ErrorResponse{Success: false, Error: "Unauthorized"})
 			return
 		}
@@ -114,6 +123,7 @@ func authMiddleware(tokenSvc *service.TokenService) gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("email", claims.Email)
 		c.Set("roles", claims.Roles)
+
 		c.Next()
 	}
 }

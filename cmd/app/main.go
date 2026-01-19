@@ -24,9 +24,9 @@ import (
 //
 // @schemes http
 //
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
+// @securityDefinitions.apikey CookieAuth
+// @in cookie
+// @name access_token
 //
 // @tag.name auth
 // @tag.description Регистрация/логин/refresh
@@ -35,7 +35,7 @@ import (
 // @tag.description Пользователи и профиль
 
 func main() {
-	cfg := config.GetConfig()
+	cfg, _ := config.Load()
 	gin.ForceConsoleColor()
 	slog.Info("Starting app")
 	slog.Debug("Debud messages are enabled")

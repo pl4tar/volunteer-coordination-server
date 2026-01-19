@@ -177,22 +177,16 @@ func (s *UserService) UpdateUser(ctx context.Context, user domain.User) (domain.
 }
 
 // ChangePassword меняет пароль пользователя
-func (s *UserService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
+func (s *UserService) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword string) error {
 	const op = "service.UserService.ChangePassword"
 
-	id, err := uuid.Parse(userID)
-	if err != nil {
-		slog.Warn("invalid UUID format",
-			slog.String("op", op),
-			slog.String("user_id", userID))
-		return fmt.Errorf("%s: invalid UUID format", op)
-	}
+	id := userID
 
 	user, err := s.userRepo.QueryGetUserByID(ctx, id)
 	if err != nil {
 		slog.Error("user not found for password change",
 			slog.String("op", op),
-			slog.String("user_id", userID))
+			slog.String("user_id", userID.String()))
 		return fmt.Errorf("%s: user not found", op)
 	}
 
@@ -216,11 +210,10 @@ func (s *UserService) ChangePassword(ctx context.Context, userID, currentPasswor
 	user.Password = string(hashedPassword)
 	user.UpdatedAt = time.Now()
 
-	_, err = s.userRepo.Save(ctx, user)
-	if err != nil {
-		slog.Error("failed to save new password",
+	if err := s.userRepo.UpdatePassword(ctx, userID, string(hashedPassword)); err != nil {
+		slog.Error("failed to update password",
 			slog.String("op", op),
-			slog.String("user_id", user.ID.String()),
+			slog.String("user_id", userID.String()),
 			slog.Any("error", err))
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -389,60 +382,59 @@ func (s *UserService) AddUserRole(ctx context.Context, userID, role string) erro
 	return nil
 }
 
-//// RemoveUserRole удаляет роль у пользователя
-//func (s *UserService) RemoveUserRole(ctx context.Context, userID, role string) error {
-//	const op = "service.UserService.RemoveUserRole"
-//
-//	id, err := uuid.Parse(userID)
-//	if err != nil {
-//		slog.Warn("invalid UUID format",
-//			slog.String("op", op),
-//			slog.String("user_id", userID))
-//		return fmt.Errorf("%s: invalid UUID format", op)
-//	}
-//
-//	// Получаем пользователя
-//	user, err := s.userRepo.FindByID(ctx, id)
-//	if err != nil {
-//		slog.Error("user not found for removing role",
-//			slog.String("op", op),
-//			slog.String("user_id", userID))
-//		return fmt.Errorf("%s: user not found", op)
-//	}
-//
-//	// Удаляем роль
-//	removed := user.RemoveRole(role)
-//	if !removed {
-//		slog.Warn("role not found on user",
-//			slog.String("op", op),
-//			slog.String("user_id", user.ID.String()),
-//			slog.String("role", role))
-//		return fmt.Errorf("%s: role not found on user", op)
-//	}
-//
-//	// Сохраняем изменения
-//	err = s.userRepo.Save(ctx, user)
-//	if err != nil {
-//		slog.Error("failed to save user after removing role",
-//			slog.String("op", op),
-//			slog.String("user_id", user.ID.String()),
-//			slog.Any("error", err))
-//		return fmt.Errorf("%s: %w", op, err)
-//	}
-//
-//	slog.Info("role removed from user successfully",
-//		slog.String("op", op),
-//		slog.String("user_id", user.ID.String()),
-//		slog.String("role", role))
-//
-//	return nil
-//}
+// RemoveUserRole удаляет роль у пользователя
+func (s *UserService) RemoveUserRole(ctx context.Context, userID, role string) error {
+	const op = "service.UserService.RemoveUserRole"
+
+	id, err := uuid.Parse(userID)
+	if err != nil {
+		slog.Warn("invalid UUID format",
+			slog.String("op", op),
+			slog.String("user_id", userID))
+		return fmt.Errorf("%s: invalid UUID format", op)
+	}
+
+	// Получаем пользователя
+	user, err := s.userRepo.QueryGetUserByID(ctx, id)
+	if err != nil {
+		slog.Error("user not found for removing role",
+			slog.String("op", op),
+			slog.String("user_id", userID))
+		return fmt.Errorf("%s: user not found", op)
+	}
+
+	// Удаляем роль
+	removed := user.RemoveRole(role)
+	if !removed {
+		slog.Warn("role not found on user",
+			slog.String("op", op),
+			slog.String("user_id", user.ID.String()),
+			slog.String("role", role))
+		return fmt.Errorf("%s: role not found on user", op)
+	}
+
+	// Сохраняем изменения
+	_, err = s.userRepo.Save(ctx, user)
+	if err != nil {
+		slog.Error("failed to save user after removing role",
+			slog.String("op", op),
+			slog.String("user_id", user.ID.String()),
+			slog.Any("error", err))
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	slog.Info("role removed from user successfully",
+		slog.String("op", op),
+		slog.String("user_id", user.ID.String()),
+		slog.String("role", role))
+
+	return nil
+}
 
 // GetUsers возвращает список пользователей с пагинацией
+// Пока заглушка
 func (s *UserService) GetUsers(ctx context.Context, pageStr, limitStr, roleFilter string) ([]*domain.User, int64, error) {
 	const op = "service.UserService.GetUsers"
 
-	// Здесь нужно реализовать метод в репозитории
-	// Пока возвращаем заглушку
 	return []*domain.User{}, 0, fmt.Errorf("%s: not implemented", op)
 }

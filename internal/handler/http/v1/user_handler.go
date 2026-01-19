@@ -394,45 +394,77 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 func (h *UserHandler) ChangePassword(c *gin.Context) {
 	const op = "handler.UserHandler.ChangePassword"
 
-	userID, exists := c.Get("user_id")
+	// 1) user_id из контекста (его должен класть auth middleware)
+	userIDVal, exists := c.Get("user_id")
 	if !exists {
 		slog.Warn("user ID not found in context", slog.String("op", op))
 		c.JSON(http.StatusUnauthorized, ErrorResponse{Success: false, Error: "Unauthorized"})
 		return
 	}
 
+	userIDStr, ok := userIDVal.(string)
+	if !ok || userIDStr == "" {
+		slog.Warn("user ID has invalid type in context",
+			slog.String("op", op),
+			slog.Any("user_id", userIDVal))
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Success: false, Error: "Unauthorized"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		slog.Warn("invalid user ID format in context",
+			slog.String("op", op),
+			slog.String("user_id", userIDStr),
+			slog.Any("error", err))
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Success: false, Error: "Unauthorized"})
+		return
+	}
+
+	// 2) JSON body
 	var req ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Warn("invalid password change request",
 			slog.String("op", op),
 			slog.Any("error", err))
-		c.JSON(http.StatusBadRequest, ErrorResponse{Success: false, Error: "Invalid request format", Details: err.Error()})
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Success: false,
+			Error:   "Invalid request format",
+			Details: err.Error(),
+		})
 		return
 	}
 
-	// Предполагается, что в сервисе уже есть метод ChangePassword.
-	// Если у тебя его нет — скажи, и я накидаю реализацию в service + repository UpdatePassword.
-	if err := h.userService.ChangePassword(c.Request.Context(), userID.(string), req.CurrentPassword, req.NewPassword); err != nil {
-		// можно завести нормальные sentinels/errors.Is, но пока — как у тебя в Register
+	// (не обязательно, но полезно) минимальная валидация без смены стиля
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		slog.Warn("empty password fields",
+			slog.String("op", op),
+			slog.String("user_id", userID.String()))
+		c.JSON(http.StatusBadRequest, ErrorResponse{Success: false, Error: "Invalid request format"})
+		return
+	}
+
+	// 3) service call
+	if err := h.userService.ChangePassword(c.Request.Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
 		switch {
 		case err.Error() == "service.UserService.ChangePassword: invalid current password":
 			slog.Warn("invalid current password",
 				slog.String("op", op),
-				slog.String("user_id", userID.(string)))
+				slog.String("user_id", userID.String()))
 			c.JSON(http.StatusBadRequest, ErrorResponse{Success: false, Error: "Invalid current password"})
 			return
 
 		case err.Error() == "service.UserService.ChangePassword: user not found":
 			slog.Warn("user not found while changing password",
 				slog.String("op", op),
-				slog.String("user_id", userID.(string)))
+				slog.String("user_id", userID.String()))
 			c.JSON(http.StatusNotFound, ErrorResponse{Success: false, Error: "User not found"})
 			return
 
 		default:
 			slog.Error("failed to change password",
 				slog.String("op", op),
-				slog.String("user_id", userID.(string)),
+				slog.String("user_id", userID.String()),
 				slog.Any("error", err))
 			c.JSON(http.StatusInternalServerError, ErrorResponse{Success: false, Error: "Failed to change password"})
 			return
@@ -441,7 +473,7 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 
 	slog.Info("password changed successfully",
 		slog.String("op", op),
-		slog.String("user_id", userID.(string)))
+		slog.String("user_id", userID.String()))
 
 	c.JSON(http.StatusOK, SuccessResponse{Success: true, Message: "Password changed successfully"})
 }
