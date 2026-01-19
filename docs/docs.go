@@ -174,7 +174,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Возвращает список всех пользователей (только для администраторов)",
+                "description": "Возвращает список всех пользователей (только для администраторов) с пагинацией и необязательным фильтром по роли.",
                 "consumes": [
                     "application/json"
                 ],
@@ -189,22 +189,43 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "default": 1,
-                        "description": "Номер страницы",
+                        "description": "Номер страницы (\u003e= 1)",
                         "name": "page",
                         "in": "query"
                     },
                     {
                         "type": "integer",
                         "default": 20,
-                        "description": "Количество записей на странице",
+                        "description": "Количество записей на странице (1..200)",
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Фильтр по роли",
+                        "description": "Фильтр по роли (например: admin, volunteer, user)",
                         "name": "role",
                         "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Общее количество пользователей с учётом фильтра",
+                        "name": "X-Total-Count",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Текущая страница",
+                        "name": "X-Page",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Лимит на страницу",
+                        "name": "X-Limit",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {

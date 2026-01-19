@@ -74,7 +74,6 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 		selectSQL += " WHERE " + strings.Join(where2, " AND ")
 	}
 
-	// pagination
 	selectSQL += fmt.Sprintf(" ORDER BY u.created_at DESC LIMIT $%d OFFSET $%d", len(args2)+1, len(args2)+2)
 	args2 = append(args2, limit, offset)
 
@@ -88,11 +87,13 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 
 	for rows.Next() {
 		u := domain.User{}
+		var phone sql.NullString
+
 		if err := rows.Scan(
 			&u.ID,
 			&u.Email,
 			&u.FullName,
-			&u.Phone,
+			&phone,
 			&u.Password,
 			&u.IsBlocked,
 			&u.CreatedAt,
@@ -101,7 +102,12 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 			return nil, 0, fmt.Errorf("repository.userRepository.ListUsers scan: %w", err)
 		}
 
-		// если у тебя роли вытаскиваются отдельным запросом:
+		if phone.Valid {
+			u.Phone = phone.String
+		} else {
+			u.Phone = ""
+		}
+
 		roles, err := r.GetUserRoles(ctx, u.ID)
 		if err != nil && err != pgx.ErrNoRows {
 			return nil, 0, fmt.Errorf("repository.userRepository.ListUsers roles: %w", err)

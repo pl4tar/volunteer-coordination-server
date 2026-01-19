@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 	"volunteer-coordination-server/internal/domain"
 	"volunteer-coordination-server/internal/repository"
@@ -432,9 +433,59 @@ func (s *UserService) RemoveUserRole(ctx context.Context, userID, role string) e
 }
 
 // GetUsers возвращает список пользователей с пагинацией
-// Пока заглушка
 func (s *UserService) GetUsers(ctx context.Context, pageStr, limitStr, roleFilter string) ([]*domain.User, int64, error) {
 	const op = "service.UserService.GetUsers"
 
-	return []*domain.User{}, 0, fmt.Errorf("%s: not implemented", op)
+	page := 1
+	if pageStr != "" {
+		p, err := strconv.Atoi(pageStr)
+		if err != nil || p <= 0 {
+			slog.Warn("invalid page param, using default",
+				slog.String("op", op),
+				slog.String("page", pageStr))
+		} else {
+			page = p
+		}
+	}
+
+	limit := 20
+	if limitStr != "" {
+		l, err := strconv.Atoi(limitStr)
+		if err != nil || l <= 0 {
+			slog.Warn("invalid limit param, using default",
+				slog.String("op", op),
+				slog.String("limit", limitStr))
+		} else {
+			// защита от слишком больших выборок
+			if l > 200 {
+				l = 200
+			}
+			limit = l
+		}
+	}
+
+	if roleFilter != "" && !domain.IsValidRole(roleFilter) {
+		slog.Warn("invalid role filter",
+			slog.String("op", op),
+			slog.String("role", roleFilter))
+		return nil, 0, fmt.Errorf("%s: invalid role filter", op)
+	}
+
+	users, total, err := s.userRepo.ListUsers(ctx, page, limit, roleFilter)
+	if err != nil {
+		slog.Error("failed to list users",
+			slog.String("op", op),
+			slog.Int("page", page),
+			slog.Int("limit", limit),
+			slog.String("role", roleFilter),
+			slog.Any("error", err))
+		return nil, 0, fmt.Errorf("%s: %w", op, err)
+	}
+
+	result := make([]*domain.User, 0, len(users))
+	for i := range users {
+		result = append(result, &users[i]) // адрес элемента слайса, безопасно
+	}
+
+	return result, total, nil
 }
