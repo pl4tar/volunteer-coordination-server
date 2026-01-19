@@ -38,7 +38,7 @@ func NewAuthService(
 // sessionTTL — логично привязать к refresh TTL
 func (s *AuthService) sessionTTL() time.Duration {
 	// refresh TTL у тебя есть в cfg.JWT.RefreshTokenTTL
-	return s.cfg.JWT.RefreshTokenTTL
+	return s.cfg.JWT.RefreshTokenTTLParsed
 }
 
 // Register: создаёт пользователя + сессию + токены (как “автологин”)

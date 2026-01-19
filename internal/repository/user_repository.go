@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -137,38 +138,37 @@ func (r *userRepository) QueryGetUserByEmail(ctx context.Context, email string) 
 
 	user := domain.User{}
 
+	var phone sql.NullString
+
 	err := r.db.QueryRow(ctx, query, email).Scan(
 		&user.ID,
 		&user.Email,
-		&user.Password,
+		&user.Password, // лучше назвать PasswordHash, но пока оставим как есть
 		&user.FullName,
-		&user.Phone,
+		&phone,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.IsBlocked,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Warn("user not found by email",
-				slog.String("op", op),
-				slog.String("email", email))
+			slog.Warn("user not found by email", slog.String("op", op), slog.String("email", email))
 			return domain.User{}, fmt.Errorf("%s: user not found", op)
 		}
 
-		slog.Error("failed to get user by email",
-			slog.String("op", op),
-			slog.String("email", email),
-			slog.Any("error", err))
+		slog.Error("failed to get user by email", slog.String("op", op), slog.String("email", email), slog.Any("error", err))
 		return domain.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if phone.Valid {
+		user.Phone = phone.String
+	} else {
+		user.Phone = "" // или оставь как есть, если у тебя Phone string
 	}
 
 	roles, err := r.GetUserRoles(ctx, user.ID)
 	if err != nil {
-		slog.Error("failed to get user roles",
-			slog.String("op", op),
-			slog.String("user_id", user.ID.String()),
-			slog.Any("error", err))
+		slog.Error("failed to get user roles", slog.String("op", op), slog.String("user_id", user.ID.String()), slog.Any("error", err))
 	} else {
 		user.Roles = roles
 	}

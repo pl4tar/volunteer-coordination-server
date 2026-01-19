@@ -20,6 +20,17 @@ definitions:
       success:
         type: boolean
     type: object
+  v1.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        minLength: 6
+        type: string
+    required:
+    - email
+    - password
+    type: object
   v1.LoginResponse:
     properties:
       message:
@@ -55,6 +66,11 @@ definitions:
         type: string
       id:
         type: string
+    type: object
+  v1.SuccessOnlyResponse:
+    properties:
+      success:
+        type: boolean
     type: object
   v1.SuccessResponse:
     properties:
@@ -103,6 +119,76 @@ info:
   title: Volunteer Coordination Server API
   version: "1.0"
 paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Аутентифицирует пользователя. Токены НЕ возвращаются в теле ответа — они устанавливаются в cookies:
+        - access_token (короткоживущий)
+        - refresh_token (HttpOnly, долгоживущий)
+      parameters:
+      - description: Данные для входа
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Успешный логин (без токенов в теле)
+          schema:
+            $ref: '#/definitions/v1.LoginResponse'
+        "400":
+          description: Некорректный формат запроса
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Неверные учетные данные
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - CookieAuth: []
+      summary: Логин
+      tags:
+      - auth
+  /api/v1/auth/logout:
+    post:
+      description: Удаляет access_token и refresh_token cookies (устанавливает пустые
+        значения с отрицательным MaxAge).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success=true
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+      summary: Выход
+      tags:
+      - auth
+  /api/v1/auth/refresh:
+    post:
+      description: |-
+        Обновляет access/refresh токены. refresh_token берётся из cookie (HttpOnly).
+        В случае успеха сервер обновляет cookies: access_token и refresh_token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SuccessOnlyResponse'
+        "401":
+          description: Нет refresh_token cookie или refresh_token невалиден
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Обновление токенов
+      tags:
+      - auth
   /api/v1/auth/register:
     post:
       consumes:
@@ -317,8 +403,8 @@ paths:
 schemes:
 - http
 securityDefinitions:
-  BearerAuth:
-    in: header
-    name: Authorization
+  CookieAuth:
+    in: cookie
+    name: access_token
     type: apiKey
 swagger: "2.0"

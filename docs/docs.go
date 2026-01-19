@@ -15,6 +15,106 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/v1/auth/login": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "description": "Аутентифицирует пользователя. Токены НЕ возвращаются в теле ответа — они устанавливаются в cookies:\n- access_token (короткоживущий)\n- refresh_token (HttpOnly, долгоживущий)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Логин",
+                "parameters": [
+                    {
+                        "description": "Данные для входа",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Успешный логин (без токенов в теле)",
+                        "schema": {
+                            "$ref": "#/definitions/v1.LoginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный формат запроса",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Неверные учетные данные",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/logout": {
+            "post": {
+                "description": "Удаляет access_token и refresh_token cookies (устанавливает пустые значения с отрицательным MaxAge).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Выход",
+                "responses": {
+                    "200": {
+                        "description": "success=true",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/refresh": {
+            "post": {
+                "description": "Обновляет access/refresh токены. refresh_token берётся из cookie (HttpOnly).\nВ случае успеха сервер обновляет cookies: access_token и refresh_token.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Обновление токенов",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.SuccessOnlyResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Нет refresh_token cookie или refresh_token невалиден",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/register": {
             "post": {
                 "description": "Создает нового пользователя в системе",
@@ -377,6 +477,22 @@ const docTemplate = `{
                 }
             }
         },
+        "v1.LoginRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 6
+                }
+            }
+        },
         "v1.LoginResponse": {
             "type": "object",
             "properties": {
@@ -428,6 +544,14 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string"
+                }
+            }
+        },
+        "v1.SuccessOnlyResponse": {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "type": "boolean"
                 }
             }
         },
@@ -490,10 +614,10 @@ const docTemplate = `{
         }
     },
     "securityDefinitions": {
-        "BearerAuth": {
+        "CookieAuth": {
             "type": "apiKey",
-            "name": "Authorization",
-            "in": "header"
+            "name": "access_token",
+            "in": "cookie"
         }
     }
 }`
