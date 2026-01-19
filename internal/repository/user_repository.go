@@ -194,27 +194,22 @@ func (r *userRepository) QueryGetUserByID(ctx context.Context, id uuid.UUID) (do
 		WHERE id = $1
 	`
 
-	var user domain.User
+	var (
+		user  domain.User
+		phone sql.NullString
+	)
 
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&user.ID,
 		&user.Email,
 		&user.Password,
 		&user.FullName,
-		&user.Phone,
+		&phone, // <-- сюда
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.IsBlocked,
 	)
-
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			slog.Warn("user not found by ID",
-				slog.String("op", op),
-				slog.String("user_id", id.String()))
-			return domain.User{}, fmt.Errorf("%s: user not found", op)
-		}
-
 		slog.Error("failed to get user by ID",
 			slog.String("op", op),
 			slog.String("user_id", id.String()),
@@ -222,15 +217,10 @@ func (r *userRepository) QueryGetUserByID(ctx context.Context, id uuid.UUID) (do
 		return domain.User{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	// Получаем роли пользователя
-	roles, err := r.GetUserRoles(ctx, user.ID)
-	if err != nil {
-		slog.Error("failed to get user roles",
-			slog.String("op", op),
-			slog.String("user_id", user.ID.String()),
-			slog.Any("error", err))
+	if phone.Valid {
+		user.Phone = phone.String
 	} else {
-		user.Roles = roles
+		user.Phone = ""
 	}
 
 	return user, nil

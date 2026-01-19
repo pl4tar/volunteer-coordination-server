@@ -58,26 +58,26 @@ func (s *AuthService) Register(ctx context.Context, reg domain.UserRegistration,
 		return domain.AuthResult{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	SavedID, err := s.userRepo.Save(ctx, user)
+	// ВАЖНО: сохраняем и забираем реальный ID из БД
+	savedID, err := s.userRepo.Save(ctx, user)
 	if err != nil {
 		return domain.AuthResult{}, fmt.Errorf("%s: %w", op, err)
 	}
+	user.ID = savedID // <-- КЛЮЧЕВАЯ СТРОКА (фикс рассинхрона)
 
 	// создаём сессию
-	session := domain.NewSession(SavedID, userAgent, ip, s.sessionTTL())
-
-	// важно: Save по указателю, чтобы CreatedAt/ExpiresAt не терялись
+	session := domain.NewSession(user.ID, userAgent, ip, s.sessionTTL())
 	if err := s.sessionRepo.Save(ctx, &session); err != nil {
 		return domain.AuthResult{}, fmt.Errorf("%s: failed to create session: %w", op, err)
 	}
 
-	// генерим токены
+	// генерим токены ТОЛЬКО по user.ID (который уже = savedID)
 	tokens, err := s.tokenSvc.GenerateTokens(user.ID.String(), user.Email, user.GetRoles())
 	if err != nil {
 		return domain.AuthResult{}, fmt.Errorf("%s: failed to generate tokens: %w", op, err)
 	}
 
-	// обновляем refresh токен в сессии на JWT refresh (важно!)
+	// обновляем refresh токен в сессии
 	session.RefreshToken = tokens.RefreshToken
 	if err := s.sessionRepo.UpdateUserSession(ctx, session.RefreshToken, session.ExpiresAt, session.ID); err != nil {
 		return domain.AuthResult{}, fmt.Errorf("%s: failed to update session: %w", op, err)

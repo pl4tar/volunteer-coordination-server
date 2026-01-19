@@ -76,9 +76,14 @@ func SetupRouter(_ context.Context, cfg *config.Config, db *pgxpool.Pool) *gin.E
 		{
 			users.GET("/me", userHandler.GetCurrentUser)
 			users.PUT("/me", userHandler.UpdateUser)
+
 			users.PUT("/me/password", userHandler.ChangePassword)
 
+			// Алиас, чтобы /users/password тоже работал (и не попадал в /:id)
+			users.PUT("/password", userHandler.ChangePassword)
+
 			users.GET("", userHandler.GetUsers)
+
 			users.GET("/:id", userHandler.GetUserByID)
 		}
 	}
