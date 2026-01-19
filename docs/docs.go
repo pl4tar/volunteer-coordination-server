@@ -384,32 +384,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "session": {
-                    "type": "object",
-                    "properties": {
-                        "expires_at": {
-                            "type": "string"
-                        },
-                        "id": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "tokens": {
-                    "type": "object",
-                    "properties": {
-                        "access_token": {
-                            "type": "string"
-                        },
-                        "expires_in": {
-                            "type": "integer"
-                        },
-                        "refresh_token": {
-                            "type": "string"
-                        },
-                        "token_type": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/v1.SessionDTO"
                 },
                 "user": {
                     "$ref": "#/definitions/v1.UserResponse"
@@ -442,6 +417,17 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "v1.SessionDTO": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
                 }
             }
         },
@@ -516,7 +502,7 @@ const docTemplate = `{
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
 	Host:             "localhost:4949",
-	BasePath:         "/api/v1",
+	BasePath:         "/",
 	Schemes:          []string{"http"},
 	Title:            "Volunteer Coordination Server API",
 	Description:      "API для системы координации волонтёров.\nКонфиг поднимается из CONFIG_PATH (например: ./config/local.yaml).\nDB: host=localhost port=5432 db=volonteer user=postgres (пароль берётся из переменных окружения).",

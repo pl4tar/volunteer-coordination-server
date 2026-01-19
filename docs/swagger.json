@@ -10,7 +10,7 @@
         "version": "1.0"
     },
     "host": "localhost:4949",
-    "basePath": "/api/v1",
+    "basePath": "/",
     "paths": {
         "/api/v1/auth/register": {
             "post": {
@@ -381,32 +381,7 @@
                     "type": "string"
                 },
                 "session": {
-                    "type": "object",
-                    "properties": {
-                        "expires_at": {
-                            "type": "string"
-                        },
-                        "id": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "tokens": {
-                    "type": "object",
-                    "properties": {
-                        "access_token": {
-                            "type": "string"
-                        },
-                        "expires_in": {
-                            "type": "integer"
-                        },
-                        "refresh_token": {
-                            "type": "string"
-                        },
-                        "token_type": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/v1.SessionDTO"
                 },
                 "user": {
                     "$ref": "#/definitions/v1.UserResponse"
@@ -439,6 +414,17 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "v1.SessionDTO": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
                 }
             }
         },

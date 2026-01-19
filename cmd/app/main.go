@@ -20,7 +20,7 @@ import (
 // @description DB: host=localhost port=5432 db=volonteer user=postgres (пароль берётся из переменных окружения).
 //
 // @host localhost:4949
-// @BasePath /api/v1
+// @BasePath /
 //
 // @schemes http
 //

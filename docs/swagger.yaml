@@ -1,4 +1,4 @@
-basePath: /api/v1
+basePath: /
 definitions:
   v1.ChangePasswordRequest:
     properties:
@@ -25,23 +25,7 @@ definitions:
       message:
         type: string
       session:
-        properties:
-          expires_at:
-            type: string
-          id:
-            type: string
-        type: object
-      tokens:
-        properties:
-          access_token:
-            type: string
-          expires_in:
-            type: integer
-          refresh_token:
-            type: string
-          token_type:
-            type: string
-        type: object
+        $ref: '#/definitions/v1.SessionDTO'
       user:
         $ref: '#/definitions/v1.UserResponse'
     type: object
@@ -64,6 +48,13 @@ definitions:
     - email
     - full_name
     - password
+    type: object
+  v1.SessionDTO:
+    properties:
+      expires_at:
+        type: string
+      id:
+        type: string
     type: object
   v1.SuccessResponse:
     properties:
