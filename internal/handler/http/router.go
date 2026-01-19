@@ -15,12 +15,12 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// SetupRouter собирает зависимости (repos/services/handlers) и регистрирует HTTP роуты.
-func SetupRouter(ctx context.Context, cfg *config.Config, db *pgxpool.Pool) *gin.Engine {
+func SetupRouter(_ context.Context, cfg *config.Config, db *pgxpool.Pool) *gin.Engine {
 	r := gin.New()
-
 	r.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
 		return fmt.Sprintf("%s - [%s] \"%s %s %s %d %s \"%s\" %s\"\n",
 			param.ClientIP,
@@ -36,36 +36,37 @@ func SetupRouter(ctx context.Context, cfg *config.Config, db *pgxpool.Pool) *gin
 	}))
 	r.Use(gin.Recovery())
 
+	// CORS для cookie-auth
 	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowAllOrigins = true
-	//corsConfig.AllowOrigins = []string{"*"}
+	corsConfig.AllowOrigins = []string{
+		"http://localhost:3000",
+		"http://127.0.0.1:3000",
+		"http://localhost:5173",
+		"http://127.0.0.1:5173",
+	}
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}
 	corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	corsConfig.AllowCredentials = true
 	r.Use(cors.New(corsConfig))
 
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "pong"})
-	})
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "pong"}) })
 
-	// --- repositories ---
 	userRepo := repository.NewUserRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
 
-	// --- services ---
 	userService := service.NewUserService(userRepo)
 	tokenService := service.NewTokenService(cfg)
 	authService := service.NewAuthService(userRepo, sessionRepo, tokenService, cfg)
 
-	// --- handlers ---
-	userHandler := v1.NewUserHandler(userService)
 	authHandler := v1.NewAuthHandler(authService)
+	userHandler := v1.NewUserHandler(userService)
 
 	api := r.Group("/api/v1")
 	{
 		auth := api.Group("/auth")
 		{
-			auth.POST("/register", userHandler.Register)
+			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/refresh", authHandler.Refresh)
 		}
@@ -77,31 +78,33 @@ func SetupRouter(ctx context.Context, cfg *config.Config, db *pgxpool.Pool) *gin
 			users.PUT("/me", userHandler.UpdateUser)
 			users.PUT("/me/password", userHandler.ChangePassword)
 
-			users.GET("", userHandler.GetUsers)        // admin only
-			users.GET("/:id", userHandler.GetUserByID) // self/admin
+			users.GET("", userHandler.GetUsers)
+			users.GET("/:id", userHandler.GetUserByID)
 		}
 	}
 
-	_ = ctx
 	return r
 }
 
-// authMiddleware валидирует Bearer access token и кладёт user_id/roles/email в gin.Context.
 func authMiddleware(tokenSvc *service.TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		// 1) cookie
+		tokenStr, _ := c.Cookie("access_token")
+
+		// 2) fallback: Bearer (для swagger/postman)
+		if strings.TrimSpace(tokenStr) == "" {
+			authHeader := c.GetHeader("Authorization")
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+				tokenStr = strings.TrimSpace(parts[1])
+			}
+		}
+
+		if strings.TrimSpace(tokenStr) == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, v1.ErrorResponse{Success: false, Error: "Unauthorized"})
 			return
 		}
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, v1.ErrorResponse{Success: false, Error: "Unauthorized"})
-			return
-		}
-
-		tokenStr := strings.TrimSpace(parts[1])
 		claims, err := tokenSvc.ValidateAccessToken(tokenStr)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, v1.ErrorResponse{Success: false, Error: "Unauthorized"})
