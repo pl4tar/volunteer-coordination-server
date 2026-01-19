@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 	"volunteer-coordination-server/internal/domain"
 
 	"github.com/google/uuid"
@@ -32,7 +33,6 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 
 	offset := (page - 1) * limit
 
-	// --- COUNT ---
 	var total int64
 
 	countSQL := `
@@ -42,8 +42,6 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 	args := []any{}
 	where := []string{}
 
-	// если фильтр по роли — предполагаем таблицу user_roles(user_id, role)
-	// если у тебя таблица иначе называется — поправишь здесь
 	if strings.TrimSpace(roleFilter) != "" {
 		countSQL += ` JOIN user_roles ur ON ur.user_id = u.id `
 		where = append(where, fmt.Sprintf("ur.role = $%d", len(args)+1))
@@ -58,7 +56,6 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 		return nil, 0, fmt.Errorf("repository.userRepository.ListUsers count: %w", err)
 	}
 
-	// --- SELECT PAGE ---
 	selectSQL := `
 		SELECT DISTINCT u.id, u.email, u.full_name, u.phone, u.password_hash, u.is_blocked, u.created_at, u.updated_at
 		FROM users u
@@ -89,9 +86,7 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 	users := make([]domain.User, 0, limit)
 
 	for rows.Next() {
-		var u domain.User
-		// ВАЖНО: поля должны соответствовать твоему domain.User
-		// Если у тебя другие имена/типы — поправь Scan
+		u := domain.User{}
 		if err := rows.Scan(
 			&u.ID,
 			&u.Email,
@@ -288,50 +283,77 @@ func (r *userRepository) GetUserRoles(ctx context.Context, userID uuid.UUID) ([]
 
 // Save - создает запись в бд, принимает структуру [domain.User]
 // Валидация на существующих пользователей реализована на стороне бд
-func (r *userRepository) Save(ctx context.Context, user domain.User) (string, error) {
-	var userID string
-	PasswordHash, _ := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+func (r *userRepository) Save(ctx context.Context, user domain.User) (uuid.UUID, error) {
+	var userID uuid.UUID
+
+	// 1) password_hash генерируем в Save (но не делаем двойной bcrypt)
+	passwordHash := user.Password
+
+	// bcrypt-хеш обычно начинается с "$2a$", "$2b$", "$2y$"
+	isBcryptHash := len(passwordHash) >= 4 && passwordHash[0:3] == "$2"
+	if !isBcryptHash {
+		// значит пришёл plaintext — хешируем
+		hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		if err != nil {
+			slog.Error("Error hashing password", "error", err)
+			return uuid.Nil, err
+		}
+		passwordHash = string(hash)
+	}
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		slog.Error("Error starting transaction", "error", err)
-		return "", err
+		return uuid.Nil, err
 	}
-
 	defer func() {
 		if err != nil {
-			tx.Rollback(ctx)
+			_ = tx.Rollback(ctx)
 		}
 	}()
 
+	// 2) создаём пользователя (через твою DB-функцию create_user)
 	err = tx.QueryRow(
 		ctx,
 		`SELECT create_user($1, $2, $3)`,
 		user.Email,
-		PasswordHash,
+		[]byte(passwordHash), // create_user у тебя принимал bytes (как было)
 		user.FullName,
 	).Scan(&userID)
-
 	if err != nil {
 		slog.Error("Error querying user", "error", err)
-		return "", err
+		return uuid.Nil, err
 	}
 
-	_, err = tx.Exec(ctx,
-		`INSERT INTO user_roles (user_id, role) VALUES ($1, $2) 
-				 ON CONFLICT (user_id, role) DO NOTHING`,
-		userID, user.Roles)
-	if err != nil {
-		slog.Error("Error inserting new user", "error", err)
-		return "", err
+	// 3) роли вставляем по одной, а не как []domain.UserRole одним параметром
+	// У тебя в БД точно есть granted_at, потому что ты его SELECT'ишь в GetUserRoles.
+	// Если в БД стоит default NOW() — вставка с granted_at тоже нормально работает.
+	const insertRole = `
+		INSERT INTO user_roles (user_id, role, granted_at)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id, role) DO NOTHING
+	`
+
+	now := time.Now()
+	for _, role := range user.Roles {
+		grantedAt := role.GrantedAt
+		if grantedAt.IsZero() {
+			grantedAt = now
+		}
+
+		_, err = tx.Exec(ctx, insertRole, userID, role.Role, grantedAt)
+		if err != nil {
+			slog.Error("Error inserting user role", "error", err)
+			return uuid.Nil, err
+		}
 	}
 
 	if err = tx.Commit(ctx); err != nil {
 		slog.Error("Error committing transaction", "error", err)
-		return "", err
+		return uuid.Nil, err
 	}
 
-	return userID, err
+	return userID, nil
 }
 
 func (r *userRepository) UpdateProfile(ctx context.Context, user domain.User) error {
