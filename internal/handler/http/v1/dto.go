@@ -42,20 +42,15 @@ type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=6"`
 }
+type SessionDTO struct {
+	ID        uuid.UUID `json:"id"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
 
 type LoginResponse struct {
 	Message string       `json:"message"`
 	User    UserResponse `json:"user"`
-	Tokens  struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		TokenType    string `json:"token_type"`
-		ExpiresIn    int    `json:"expires_in"`
-	} `json:"tokens"`
-	Session struct {
-		ID        uuid.UUID `json:"id,omitempty"`
-		ExpiresAt time.Time `json:"expires_at,omitempty"`
-	} `json:"session,omitempty"`
+	Session SessionDTO   `json:"session"`
 }
 
 type RefreshTokenRequest struct {

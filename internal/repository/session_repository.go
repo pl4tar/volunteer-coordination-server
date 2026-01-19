@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 	"volunteer-coordination-server/internal/domain"
 
 	"github.com/google/uuid"
@@ -21,14 +22,14 @@ func NewSessionRepository(db *pgxpool.Pool) SessionRepository {
 }
 
 // Save создает новую сессию пользователя
-func (r *sessionRepository) Save(ctx context.Context, session domain.Session) error {
+func (r *sessionRepository) Save(ctx context.Context, session *domain.Session) error {
 	const op = "postgres.sessionRepository.Save"
 
 	query := `
 		INSERT INTO user_sessions (
-			id, user_id, refresh_token, user_agent, 
-			ip_address, created_at, expires_at
-		) VALUES ($1, $2, $3, $4, $5::inet, NOW(), NOW() + INTERVAL '30 days')
+			id, user_id, refresh_token, user_agent,
+			ip_address, expires_at
+		) VALUES ($1, $2, $3, $4, $5::inet, $6)
 		RETURNING created_at, expires_at
 	`
 
@@ -38,6 +39,7 @@ func (r *sessionRepository) Save(ctx context.Context, session domain.Session) er
 		session.RefreshToken,
 		session.UserAgent,
 		session.IPAddress,
+		session.ExpiresAt,
 	).Scan(&session.CreatedAt, &session.ExpiresAt)
 
 	if err != nil {
@@ -48,25 +50,20 @@ func (r *sessionRepository) Save(ctx context.Context, session domain.Session) er
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	slog.Info("session created",
-		slog.String("op", op),
-		slog.String("user_id", session.UserID.String()),
-		slog.String("session_id", session.ID.String()))
-
 	return nil
 }
 
 // UpdateUserSession обновляет сессию с новым JWT refresh токеном
-func (r *sessionRepository) UpdateUserSession(ctx context.Context, refreshToken string, sessionID uuid.UUID) error {
+func (r *sessionRepository) UpdateUserSession(ctx context.Context, refreshToken string, expiresAt time.Time, sessionID uuid.UUID) error {
 	const op = "postgres.sessionRepository.UpdateUserSession"
 
 	query := `
-		UPDATE user_sessions 
-		SET refresh_token = $1, updated_at = NOW() 
-		WHERE id = $2
+		UPDATE user_sessions
+		SET refresh_token = $1, expires_at = $2
+		WHERE id = $3
 	`
 
-	result, err := r.db.Exec(ctx, query, refreshToken, sessionID)
+	result, err := r.db.Exec(ctx, query, refreshToken, expiresAt, sessionID)
 	if err != nil {
 		slog.Error("failed to update user session",
 			slog.String("op", op),
@@ -76,15 +73,9 @@ func (r *sessionRepository) UpdateUserSession(ctx context.Context, refreshToken 
 	}
 
 	if result.RowsAffected() == 0 {
-		slog.Warn("session not found for update",
-			slog.String("op", op),
-			slog.String("session_id", sessionID.String()))
 		return ErrNotFound
 	}
 
-	slog.Info("user session updated",
-		slog.String("op", op),
-		slog.String("session_id", sessionID.String()))
 	return nil
 }
 

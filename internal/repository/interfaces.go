@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 	"volunteer-coordination-server/internal/domain"
 
 	"github.com/google/uuid"
@@ -14,7 +15,7 @@ var (
 )
 
 type UserRepository interface {
-	Save(ctx context.Context, user domain.User) (string, error)
+	Save(ctx context.Context, user domain.User) (uuid.UUID, error)
 	QueryGetUserByEmail(ctx context.Context, email string) (domain.User, error)
 	QueryGetUserByID(ctx context.Context, userID uuid.UUID) (domain.User, error)
 
@@ -33,8 +34,8 @@ type UserRepository interface {
 
 // SessionRepository интерфейс для работы с сессиями
 type SessionRepository interface {
-	Save(ctx context.Context, session domain.Session) error
-	UpdateUserSession(ctx context.Context, refreshToken string, sessionID uuid.UUID) error
+	Save(ctx context.Context, session *domain.Session) error
+	UpdateUserSession(ctx context.Context, refreshToken string, expiresAt time.Time, sessionID uuid.UUID) error
 	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (domain.Session, error)
 	Delete(ctx context.Context, sessionID uuid.UUID) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
