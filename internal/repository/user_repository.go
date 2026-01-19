@@ -286,13 +286,11 @@ func (r *userRepository) GetUserRoles(ctx context.Context, userID uuid.UUID) ([]
 func (r *userRepository) Save(ctx context.Context, user domain.User) (uuid.UUID, error) {
 	var userID uuid.UUID
 
-	// 1) password_hash генерируем в Save (но не делаем двойной bcrypt)
 	passwordHash := user.Password
 
-	// bcrypt-хеш обычно начинается с "$2a$", "$2b$", "$2y$"
-	isBcryptHash := len(passwordHash) >= 4 && passwordHash[0:3] == "$2"
+	isBcryptHash := strings.HasPrefix(passwordHash, "$2")
+
 	if !isBcryptHash {
-		// значит пришёл plaintext — хешируем
 		hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 		if err != nil {
 			slog.Error("Error hashing password", "error", err)
@@ -312,12 +310,11 @@ func (r *userRepository) Save(ctx context.Context, user domain.User) (uuid.UUID,
 		}
 	}()
 
-	// 2) создаём пользователя (через твою DB-функцию create_user)
 	err = tx.QueryRow(
 		ctx,
 		`SELECT create_user($1, $2, $3)`,
 		user.Email,
-		[]byte(passwordHash), // create_user у тебя принимал bytes (как было)
+		[]byte(passwordHash),
 		user.FullName,
 	).Scan(&userID)
 	if err != nil {
@@ -325,9 +322,6 @@ func (r *userRepository) Save(ctx context.Context, user domain.User) (uuid.UUID,
 		return uuid.Nil, err
 	}
 
-	// 3) роли вставляем по одной, а не как []domain.UserRole одним параметром
-	// У тебя в БД точно есть granted_at, потому что ты его SELECT'ишь в GetUserRoles.
-	// Если в БД стоит default NOW() — вставка с granted_at тоже нормально работает.
 	const insertRole = `
 		INSERT INTO user_roles (user_id, role, granted_at)
 		VALUES ($1, $2, $3)
