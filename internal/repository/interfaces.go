@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 	"volunteer-coordination-server/internal/domain"
 
 	"github.com/google/uuid"
@@ -14,7 +15,7 @@ var (
 )
 
 type UserRepository interface {
-	Save(ctx context.Context, user domain.User) (string, error)
+	Save(ctx context.Context, user domain.User) (uuid.UUID, error)
 	QueryGetUserByEmail(ctx context.Context, email string) (domain.User, error)
 	QueryGetUserByID(ctx context.Context, userID uuid.UUID) (domain.User, error)
 
@@ -33,12 +34,38 @@ type UserRepository interface {
 
 // SessionRepository интерфейс для работы с сессиями
 type SessionRepository interface {
-	Save(ctx context.Context, session domain.Session) error
-	UpdateUserSession(ctx context.Context, refreshToken string, sessionID uuid.UUID) error
+	Save(ctx context.Context, session *domain.Session) error
+	UpdateUserSession(ctx context.Context, refreshToken string, expiresAt time.Time, sessionID uuid.UUID) error
 	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (domain.Session, error)
 	Delete(ctx context.Context, sessionID uuid.UUID) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 
 	FindByID(ctx context.Context, id uuid.UUID) (domain.Session, error)
 	DeleteExpired(ctx context.Context) error
+}
+
+// EventRepository интерфейс для мероприятий
+type EventRepository interface {
+	List(ctx context.Context, q EventListQuery) ([]Event, int, error)
+	GetByID(ctx context.Context, id uuid.UUID) (Event, error)
+}
+
+// RegistrationRepository интерфейс для заявок
+type RegistrationRepository interface {
+	UpsertApplied(ctx context.Context, eventID, userID uuid.UUID) error
+	Cancel(ctx context.Context, eventID, userID uuid.UUID) error
+	CountConfirmed(ctx context.Context, eventID uuid.UUID) (int, error)
+	History(ctx context.Context, userID uuid.UUID, limit, offset int) ([]HistoryItem, int, error)
+}
+
+// NotificationRepository интерфейс для уведомлений
+type NotificationRepository interface {
+	List(ctx context.Context, userID uuid.UUID, onlyUnread bool, limit int) ([]Notification, error)
+	Create(ctx context.Context, n Notification) error
+	MarkRead(ctx context.Context, userID, notificationID uuid.UUID) error
+}
+
+// ReviewRepository интерфейс для отзывов
+type ReviewRepository interface {
+	Create(ctx context.Context, eventID, userID uuid.UUID, rating int16, comment string) error
 }

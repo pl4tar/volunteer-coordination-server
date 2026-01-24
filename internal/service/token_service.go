@@ -56,7 +56,7 @@ func (s *TokenService) GenerateTokens(userID, email string, roles []string) (*do
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		TokenType:    "Bearer",
-		ExpiresIn:    int(s.config.JWT.AccessTokenTTL.Seconds()),
+		ExpiresIn:    int(s.config.JWT.AccessTokenTTLParsed.Seconds()),
 	}
 
 	slog.Debug("tokens generated", "user_id", userID)
@@ -70,7 +70,7 @@ func (s *TokenService) generateAccessToken(userID, email string, roles []string)
 		Email:  email,
 		Roles:  roles,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.config.JWT.AccessTokenTTL)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.config.JWT.AccessTokenTTLParsed)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    s.config.JWT.Issuer,
 			Subject:   userID,
@@ -84,7 +84,7 @@ func (s *TokenService) generateAccessToken(userID, email string, roles []string)
 // generateRefreshToken создает refresh token
 func (s *TokenService) generateRefreshToken(userID string) (string, error) {
 	claims := jwt.RegisteredClaims{
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.config.JWT.RefreshTokenTTL)),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.config.JWT.RefreshTokenTTLParsed)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 		Issuer:    s.config.JWT.Issuer,
 		Subject:   userID,

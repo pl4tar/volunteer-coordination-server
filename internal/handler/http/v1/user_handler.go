@@ -2,6 +2,7 @@
 package v1
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -394,45 +395,77 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 func (h *UserHandler) ChangePassword(c *gin.Context) {
 	const op = "handler.UserHandler.ChangePassword"
 
-	userID, exists := c.Get("user_id")
+	// 1) user_id из контекста (его должен класть auth middleware)
+	userIDVal, exists := c.Get("user_id")
 	if !exists {
 		slog.Warn("user ID not found in context", slog.String("op", op))
 		c.JSON(http.StatusUnauthorized, ErrorResponse{Success: false, Error: "Unauthorized"})
 		return
 	}
 
+	userIDStr, ok := userIDVal.(string)
+	if !ok || userIDStr == "" {
+		slog.Warn("user ID has invalid type in context",
+			slog.String("op", op),
+			slog.Any("user_id", userIDVal))
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Success: false, Error: "Unauthorized"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		slog.Warn("invalid user ID format in context",
+			slog.String("op", op),
+			slog.String("user_id", userIDStr),
+			slog.Any("error", err))
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Success: false, Error: "Unauthorized"})
+		return
+	}
+
+	// 2) JSON body
 	var req ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Warn("invalid password change request",
 			slog.String("op", op),
 			slog.Any("error", err))
-		c.JSON(http.StatusBadRequest, ErrorResponse{Success: false, Error: "Invalid request format", Details: err.Error()})
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Success: false,
+			Error:   "Invalid request format",
+			Details: err.Error(),
+		})
 		return
 	}
 
-	// Предполагается, что в сервисе уже есть метод ChangePassword.
-	// Если у тебя его нет — скажи, и я накидаю реализацию в service + repository UpdatePassword.
-	if err := h.userService.ChangePassword(c.Request.Context(), userID.(string), req.CurrentPassword, req.NewPassword); err != nil {
-		// можно завести нормальные sentinels/errors.Is, но пока — как у тебя в Register
+	// (не обязательно, но полезно) минимальная валидация без смены стиля
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		slog.Warn("empty password fields",
+			slog.String("op", op),
+			slog.String("user_id", userID.String()))
+		c.JSON(http.StatusBadRequest, ErrorResponse{Success: false, Error: "Invalid request format"})
+		return
+	}
+
+	// 3) service call
+	if err := h.userService.ChangePassword(c.Request.Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
 		switch {
 		case err.Error() == "service.UserService.ChangePassword: invalid current password":
 			slog.Warn("invalid current password",
 				slog.String("op", op),
-				slog.String("user_id", userID.(string)))
+				slog.String("user_id", userID.String()))
 			c.JSON(http.StatusBadRequest, ErrorResponse{Success: false, Error: "Invalid current password"})
 			return
 
 		case err.Error() == "service.UserService.ChangePassword: user not found":
 			slog.Warn("user not found while changing password",
 				slog.String("op", op),
-				slog.String("user_id", userID.(string)))
+				slog.String("user_id", userID.String()))
 			c.JSON(http.StatusNotFound, ErrorResponse{Success: false, Error: "User not found"})
 			return
 
 		default:
 			slog.Error("failed to change password",
 				slog.String("op", op),
-				slog.String("user_id", userID.(string)),
+				slog.String("user_id", userID.String()),
 				slog.Any("error", err))
 			c.JSON(http.StatusInternalServerError, ErrorResponse{Success: false, Error: "Failed to change password"})
 			return
@@ -441,20 +474,20 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 
 	slog.Info("password changed successfully",
 		slog.String("op", op),
-		slog.String("user_id", userID.(string)))
+		slog.String("user_id", userID.String()))
 
 	c.JSON(http.StatusOK, SuccessResponse{Success: true, Message: "Password changed successfully"})
 }
 
 // GetUsers возвращает список пользователей (только для админов)
 // @Summary Получить список пользователей
-// @Description Возвращает список всех пользователей (только для администраторов)
+// @Description Возвращает список всех пользователей (только для администраторов) с пагинацией и необязательным фильтром по роли.
 // @Tags users
 // @Accept json
 // @Produce json
-// @Param page query int false "Номер страницы" default(1)
-// @Param limit query int false "Количество записей на странице" default(20)
-// @Param role query string false "Фильтр по роли"
+// @Param page query int false "Номер страницы (>= 1)" default(1)
+// @Param limit query int false "Количество записей на странице (1..200)" default(20)
+// @Param role query string false "Фильтр по роли (например: admin, volunteer, user)"
 // @Success 200 {array} UserResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
@@ -464,37 +497,114 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 func (h *UserHandler) GetUsers(c *gin.Context) {
 	const op = "handler.UserHandler.GetUsers"
 
-	currentUserID, exists := c.Get("user_id")
+	// 1) user_id из контекста
+	userIDVal, exists := c.Get("user_id")
 	if !exists {
 		slog.Warn("user ID not found in context", slog.String("op", op))
 		c.JSON(http.StatusUnauthorized, ErrorResponse{Success: false, Error: "Unauthorized"})
 		return
 	}
 
-	currentUser, err := h.userService.UserByParam(c.Request.Context(), "id", currentUserID.(string))
-	if err != nil {
-		slog.Error("failed to get current user for admin check",
+	userIDStr, ok := userIDVal.(string)
+	if !ok || userIDStr == "" {
+		slog.Warn("user ID has invalid type in context",
 			slog.String("op", op),
-			slog.String("user_id", currentUserID.(string)),
-			slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Success: false, Error: "Failed to verify permissions"})
+			slog.Any("user_id", userIDVal))
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Success: false, Error: "Unauthorized"})
 		return
 	}
 
-	if !currentUser.IsAdmin() {
+	// 2) Проверка админа: сначала по ролям из JWT (быстро и правильно)
+	isAdmin := false
+
+	if rolesVal, ok := c.Get("roles"); ok {
+		switch v := rolesVal.(type) {
+		case []string:
+			for _, r := range v {
+				if r == "admin" {
+					isAdmin = true
+					break
+				}
+			}
+		case []interface{}:
+			for _, it := range v {
+				rs, _ := it.(string)
+				if rs == "admin" {
+					isAdmin = true
+					break
+				}
+			}
+		default:
+			slog.Warn("roles have unexpected type in context",
+				slog.String("op", op),
+				slog.Any("roles_type", fmt.Sprintf("%T", rolesVal)))
+		}
+	}
+
+	// 3) Fallback: если roles не прокинуты middleware — проверим через БД по UUID
+	if !isAdmin {
+		id, err := uuid.Parse(userIDStr)
+		if err != nil {
+			slog.Warn("invalid UUID format in context",
+				slog.String("op", op),
+				slog.String("user_id", userIDStr),
+				slog.Any("error", err))
+			c.JSON(http.StatusUnauthorized, ErrorResponse{Success: false, Error: "Unauthorized"})
+			return
+		}
+
+		// ВАЖНО: поправил порядок аргументов как в твоём сервисе: (param, value)
+		currentUser, err := h.userService.UserByParam(c.Request.Context(), "id", id.String())
+		if err != nil {
+			slog.Error("failed to get current user for admin check",
+				slog.String("op", op),
+				slog.String("user_id", userIDStr),
+				slog.Any("error", err))
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Success: false, Error: "Failed to verify permissions"})
+			return
+		}
+
+		isAdmin = currentUser.IsAdmin()
+	}
+
+	if !isAdmin {
 		slog.Warn("non-admin user tried to access user list",
 			slog.String("op", op),
-			slog.String("user_id", currentUser.ID.String()))
+			slog.String("user_id", userIDStr))
 		c.JSON(http.StatusForbidden, ErrorResponse{Success: false, Error: "Access denied. Admin only."})
 		return
 	}
 
-	page := c.DefaultQuery("page", "1")
-	limit := c.DefaultQuery("limit", "20")
+	// 4) Параметры списка + мягкая валидация
+	pageStr := c.DefaultQuery("page", "1")
+	limitStr := c.DefaultQuery("limit", "20")
 	role := c.Query("role")
 
-	// Предполагается, что метод есть в сервисе.
-	users, total, err := h.userService.GetUsers(c.Request.Context(), page, limit, role)
+	page := 1
+	if p, err := strconv.Atoi(pageStr); err != nil || p < 1 {
+		slog.Warn("invalid page query, using default",
+			slog.String("op", op),
+			slog.String("page", pageStr))
+		pageStr = "1"
+	} else {
+		page = p
+	}
+
+	limit := 20
+	if l, err := strconv.Atoi(limitStr); err != nil || l < 1 {
+		slog.Warn("invalid limit query, using default",
+			slog.String("op", op),
+			slog.String("limit", limitStr))
+		limitStr = "20"
+	} else {
+		if l > 200 {
+			l = 200
+		}
+		limit = l
+		limitStr = strconv.Itoa(limit)
+	}
+
+	users, total, err := h.userService.GetUsers(c.Request.Context(), strconv.Itoa(page), strconv.Itoa(limit), role)
 	if err != nil {
 		slog.Error("failed to get users list",
 			slog.String("op", op),
@@ -517,10 +627,9 @@ func (h *UserHandler) GetUsers(c *gin.Context) {
 		})
 	}
 
-	// метаданные пагинации
 	c.Header("X-Total-Count", strconv.FormatInt(total, 10))
-	c.Header("X-Page", page)
-	c.Header("X-Limit", limit)
+	c.Header("X-Page", pageStr)
+	c.Header("X-Limit", limitStr)
 
 	c.JSON(http.StatusOK, resp)
 }

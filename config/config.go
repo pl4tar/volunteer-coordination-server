@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -12,6 +13,7 @@ import (
 )
 
 type Env struct {
+	CONFIG_PATH string `env:"CONFIG_PATH"`
 	DB_NAME     string `env:"DB_NAME"`
 	DB_USERNAME string `env:"DB_USERNAME"`
 	DB_PASSWORD string `env:"DB_PASSWORD"`
@@ -33,11 +35,15 @@ type CacheConfig struct {
 }
 
 type JWTConfig struct {
-	Secret          string        `yaml:"secret" env:"JWT_SECRET"`
-	RefreshSecret   string        `yaml:"refresh_secret" env:"JWT_REFRESH_SECRET"`
-	Issuer          string        `yaml:"issuer" env:"JWT_ISSUER"`
-	AccessTokenTTL  time.Duration `yaml:"accessToken" env:"JWT_ACCESS_TOKEN_TTL"`
-	RefreshTokenTTL time.Duration `yaml:"refreshToken" env:"JWT_REFRESH_TOKEN_TTL"`
+	Secret        string `yaml:"secret" env:"JWT_SECRET"`
+	RefreshSecret string `yaml:"refresh_secret" env:"JWT_REFRESH_SECRET"`
+	Issuer        string `yaml:"issuer" env:"JWT_ISSUER"`
+
+	AccessTokenTTL  string `yaml:"accessToken" env:"JWT_ACCESS_TOKEN_TTL"`
+	RefreshTokenTTL string `yaml:"refreshToken" env:"JWT_REFRESH_TOKEN_TTL"`
+
+	AccessTokenTTLParsed  time.Duration
+	RefreshTokenTTLParsed time.Duration
 }
 
 type AuthConfig struct {
@@ -58,41 +64,48 @@ type Config struct {
 var config Config
 
 // Load загружает конфигурацию из YAML файла и переменных окружения
-func Load() *Config {
-	loadFromYAML("config.yml")
-
-	loadFromEnv()
-
-	return &config
-}
-
-func GetConfig() *Config {
-	if config == (Config{}) {
-		return Load()
+func Load() (*Config, error) {
+	path := os.Getenv("CONFIG_PATH")
+	if path == "" {
+		path = "config.yml"
 	}
-	return &config
+	var cfg Config
+
+	loadFromYAML(path, &cfg)
+	loadFromEnv(&cfg)
+
+	accessTTL, err := time.ParseDuration(cfg.JWT.AccessTokenTTL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid accessToken TTL: %w", err)
+	}
+	refreshTTL, err := time.ParseDuration(cfg.JWT.RefreshTokenTTL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid refreshToken TTL: %w", err)
+	}
+	cfg.JWT.AccessTokenTTLParsed = accessTTL
+	cfg.JWT.RefreshTokenTTLParsed = refreshTTL
+
+	return &cfg, nil
 }
 
 // loadFromYAML загружает конфигурацию из YAML файла
-func loadFromYAML(filename string) {
+func loadFromYAML(filename string, cfg *Config) {
 	file, err := os.Open(filename)
 	if err != nil {
 		slog.Warn("No YAML config file found, using defaults",
 			slog.String("filename", filename),
 			slog.Any("error", err))
-		setDefaults()
+		setDefaults(cfg)
 		return
 	}
 	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
+		if err := file.Close(); err != nil {
 			slog.Warn("Failed to close YAML config file")
 		}
 	}(file)
 
 	decoder := yaml.NewDecoder(file)
-	err = decoder.Decode(&config)
-	if err != nil {
+	if err := decoder.Decode(cfg); err != nil {
 		slog.Error("Failed to parse YAML config",
 			slog.String("filename", filename),
 			slog.Any("error", err))
@@ -104,50 +117,40 @@ func loadFromYAML(filename string) {
 }
 
 // loadFromEnv загружает конфигурацию из .env файла и переменных окружения
-func loadFromEnv() {
-	// Загружаем .env файл (если есть)
-	err := godotenv.Load()
-	if err != nil {
+func loadFromEnv(cfg *Config) {
+	if err := godotenv.Load(); err != nil {
 		slog.Debug("No .env file found, using system environment variables")
 	}
 
 	var envVars Env
-	err = env.Parse(&envVars)
-	if err != nil {
+	if err := env.Parse(&envVars); err != nil {
 		slog.Error("Failed to parse environment variables",
 			slog.Any("error", err))
 		panic(err)
 	}
-	config.Env = envVars
+	cfg.Env = envVars
 
-	err = env.Parse(&config.HTTP)
-	if err != nil {
+	if err := env.Parse(&cfg.HTTP); err != nil {
 		slog.Warn("Failed to parse HTTP env variables, using defaults",
 			slog.Any("error", err))
 	}
-
-	err = env.Parse(&config.Cache)
-	if err != nil {
+	if err := env.Parse(&cfg.Cache); err != nil {
 		slog.Warn("Failed to parse Cache env variables, using defaults",
 			slog.Any("error", err))
 	}
-
-	err = env.Parse(&config.JWT)
-	if err != nil {
+	if err := env.Parse(&cfg.JWT); err != nil {
 		slog.Warn("Failed to parse JWT env variables, using defaults",
 			slog.Any("error", err))
 	}
-
-	err = env.Parse(&config.Auth)
-	if err != nil {
+	if err := env.Parse(&cfg.Auth); err != nil {
 		slog.Warn("Failed to parse Auth env variables, using defaults",
 			slog.Any("error", err))
 	}
 }
 
 // setDefaults устанавливает значения по умолчанию
-func setDefaults() {
-	config = Config{
+func setDefaults(cfg *Config) {
+	*cfg = Config{
 		HTTP: HTTPConfig{
 			Port:         "4949",
 			ReadTimeout:  10 * time.Second,
@@ -158,11 +161,12 @@ func setDefaults() {
 			TTL: 3600 * time.Second,
 		},
 		JWT: JWTConfig{
-			Secret:          "your-super-secret-jwt-key-change-in-production",
-			RefreshSecret:   "your-refresh-secret-key-change-also",
-			Issuer:          "volunteer-coordination-server",
-			AccessTokenTTL:  120 * time.Minute,
-			RefreshTokenTTL: 43200 * time.Minute, // 30 дней
+			Secret:        "your-super-secret-jwt-key-change-in-production",
+			RefreshSecret: "your-refresh-secret-key-change-also",
+			Issuer:        "volunteer-coordination-server",
+
+			AccessTokenTTL:  "120m",
+			RefreshTokenTTL: "43200m",
 		},
 		Auth: AuthConfig{
 			UseCookies:    false,
@@ -170,12 +174,4 @@ func setDefaults() {
 			SecureCookies: false,
 		},
 	}
-}
-
-// GetEnv возвращает только переменные окружения (для обратной совместимости)
-func GetEnv() *Env {
-	if config.Env == (Env{}) {
-		loadFromEnv()
-	}
-	return &config.Env
 }

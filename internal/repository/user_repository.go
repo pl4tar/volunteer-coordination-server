@@ -2,10 +2,12 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 	"volunteer-coordination-server/internal/domain"
 
 	"github.com/google/uuid"
@@ -32,7 +34,6 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 
 	offset := (page - 1) * limit
 
-	// --- COUNT ---
 	var total int64
 
 	countSQL := `
@@ -42,8 +43,6 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 	args := []any{}
 	where := []string{}
 
-	// если фильтр по роли — предполагаем таблицу user_roles(user_id, role)
-	// если у тебя таблица иначе называется — поправишь здесь
 	if strings.TrimSpace(roleFilter) != "" {
 		countSQL += ` JOIN user_roles ur ON ur.user_id = u.id `
 		where = append(where, fmt.Sprintf("ur.role = $%d", len(args)+1))
@@ -58,7 +57,6 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 		return nil, 0, fmt.Errorf("repository.userRepository.ListUsers count: %w", err)
 	}
 
-	// --- SELECT PAGE ---
 	selectSQL := `
 		SELECT DISTINCT u.id, u.email, u.full_name, u.phone, u.password_hash, u.is_blocked, u.created_at, u.updated_at
 		FROM users u
@@ -76,7 +74,6 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 		selectSQL += " WHERE " + strings.Join(where2, " AND ")
 	}
 
-	// pagination
 	selectSQL += fmt.Sprintf(" ORDER BY u.created_at DESC LIMIT $%d OFFSET $%d", len(args2)+1, len(args2)+2)
 	args2 = append(args2, limit, offset)
 
@@ -89,14 +86,14 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 	users := make([]domain.User, 0, limit)
 
 	for rows.Next() {
-		var u domain.User
-		// ВАЖНО: поля должны соответствовать твоему domain.User
-		// Если у тебя другие имена/типы — поправь Scan
+		u := domain.User{}
+		var phone sql.NullString
+
 		if err := rows.Scan(
 			&u.ID,
 			&u.Email,
 			&u.FullName,
-			&u.Phone,
+			&phone,
 			&u.Password,
 			&u.IsBlocked,
 			&u.CreatedAt,
@@ -105,7 +102,12 @@ func (r *userRepository) ListUsers(ctx context.Context, page, limit int, roleFil
 			return nil, 0, fmt.Errorf("repository.userRepository.ListUsers scan: %w", err)
 		}
 
-		// если у тебя роли вытаскиваются отдельным запросом:
+		if phone.Valid {
+			u.Phone = phone.String
+		} else {
+			u.Phone = ""
+		}
+
 		roles, err := r.GetUserRoles(ctx, u.ID)
 		if err != nil && err != pgx.ErrNoRows {
 			return nil, 0, fmt.Errorf("repository.userRepository.ListUsers roles: %w", err)
@@ -142,38 +144,37 @@ func (r *userRepository) QueryGetUserByEmail(ctx context.Context, email string) 
 
 	user := domain.User{}
 
+	var phone sql.NullString
+
 	err := r.db.QueryRow(ctx, query, email).Scan(
 		&user.ID,
 		&user.Email,
-		&user.Password,
+		&user.Password, // лучше назвать PasswordHash, но пока оставим как есть
 		&user.FullName,
-		&user.Phone,
+		&phone,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.IsBlocked,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Warn("user not found by email",
-				slog.String("op", op),
-				slog.String("email", email))
+			slog.Warn("user not found by email", slog.String("op", op), slog.String("email", email))
 			return domain.User{}, fmt.Errorf("%s: user not found", op)
 		}
 
-		slog.Error("failed to get user by email",
-			slog.String("op", op),
-			slog.String("email", email),
-			slog.Any("error", err))
+		slog.Error("failed to get user by email", slog.String("op", op), slog.String("email", email), slog.Any("error", err))
 		return domain.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if phone.Valid {
+		user.Phone = phone.String
+	} else {
+		user.Phone = "" // или оставь как есть, если у тебя Phone string
 	}
 
 	roles, err := r.GetUserRoles(ctx, user.ID)
 	if err != nil {
-		slog.Error("failed to get user roles",
-			slog.String("op", op),
-			slog.String("user_id", user.ID.String()),
-			slog.Any("error", err))
+		slog.Error("failed to get user roles", slog.String("op", op), slog.String("user_id", user.ID.String()), slog.Any("error", err))
 	} else {
 		user.Roles = roles
 	}
@@ -199,27 +200,22 @@ func (r *userRepository) QueryGetUserByID(ctx context.Context, id uuid.UUID) (do
 		WHERE id = $1
 	`
 
-	var user domain.User
+	var (
+		user  domain.User
+		phone sql.NullString
+	)
 
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&user.ID,
 		&user.Email,
 		&user.Password,
 		&user.FullName,
-		&user.Phone,
+		&phone, // <-- сюда
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.IsBlocked,
 	)
-
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			slog.Warn("user not found by ID",
-				slog.String("op", op),
-				slog.String("user_id", id.String()))
-			return domain.User{}, fmt.Errorf("%s: user not found", op)
-		}
-
 		slog.Error("failed to get user by ID",
 			slog.String("op", op),
 			slog.String("user_id", id.String()),
@@ -227,15 +223,10 @@ func (r *userRepository) QueryGetUserByID(ctx context.Context, id uuid.UUID) (do
 		return domain.User{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	// Получаем роли пользователя
-	roles, err := r.GetUserRoles(ctx, user.ID)
-	if err != nil {
-		slog.Error("failed to get user roles",
-			slog.String("op", op),
-			slog.String("user_id", user.ID.String()),
-			slog.Any("error", err))
+	if phone.Valid {
+		user.Phone = phone.String
 	} else {
-		user.Roles = roles
+		user.Phone = ""
 	}
 
 	return user, nil
@@ -288,19 +279,30 @@ func (r *userRepository) GetUserRoles(ctx context.Context, userID uuid.UUID) ([]
 
 // Save - создает запись в бд, принимает структуру [domain.User]
 // Валидация на существующих пользователей реализована на стороне бд
-func (r *userRepository) Save(ctx context.Context, user domain.User) (string, error) {
-	var userID string
-	PasswordHash, _ := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+func (r *userRepository) Save(ctx context.Context, user domain.User) (uuid.UUID, error) {
+	var userID uuid.UUID
+
+	passwordHash := user.Password
+
+	isBcryptHash := strings.HasPrefix(passwordHash, "$2")
+
+	if !isBcryptHash {
+		hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		if err != nil {
+			slog.Error("Error hashing password", "error", err)
+			return uuid.Nil, err
+		}
+		passwordHash = string(hash)
+	}
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		slog.Error("Error starting transaction", "error", err)
-		return "", err
+		return uuid.Nil, err
 	}
-
 	defer func() {
 		if err != nil {
-			tx.Rollback(ctx)
+			_ = tx.Rollback(ctx)
 		}
 	}()
 
@@ -308,30 +310,40 @@ func (r *userRepository) Save(ctx context.Context, user domain.User) (string, er
 		ctx,
 		`SELECT create_user($1, $2, $3)`,
 		user.Email,
-		PasswordHash,
+		[]byte(passwordHash),
 		user.FullName,
 	).Scan(&userID)
-
 	if err != nil {
 		slog.Error("Error querying user", "error", err)
-		return "", err
+		return uuid.Nil, err
 	}
 
-	_, err = tx.Exec(ctx,
-		`INSERT INTO user_roles (user_id, role) VALUES ($1, $2) 
-				 ON CONFLICT (user_id, role) DO NOTHING`,
-		userID, user.Roles)
-	if err != nil {
-		slog.Error("Error inserting new user", "error", err)
-		return "", err
+	const insertRole = `
+		INSERT INTO user_roles (user_id, role, granted_at)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id, role) DO NOTHING
+	`
+
+	now := time.Now()
+	for _, role := range user.Roles {
+		grantedAt := role.GrantedAt
+		if grantedAt.IsZero() {
+			grantedAt = now
+		}
+
+		_, err = tx.Exec(ctx, insertRole, userID, role.Role, grantedAt)
+		if err != nil {
+			slog.Error("Error inserting user role", "error", err)
+			return uuid.Nil, err
+		}
 	}
 
 	if err = tx.Commit(ctx); err != nil {
 		slog.Error("Error committing transaction", "error", err)
-		return "", err
+		return uuid.Nil, err
 	}
 
-	return userID, err
+	return userID, nil
 }
 
 func (r *userRepository) UpdateProfile(ctx context.Context, user domain.User) error {

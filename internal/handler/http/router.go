@@ -15,12 +15,12 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// SetupRouter собирает зависимости (repos/services/handlers) и регистрирует HTTP роуты.
-func SetupRouter(ctx context.Context, cfg *config.Config, db *pgxpool.Pool) *gin.Engine {
+func SetupRouter(_ context.Context, cfg *config.Config, db *pgxpool.Pool) *gin.Engine {
 	r := gin.New()
-
 	r.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
 		return fmt.Sprintf("%s - [%s] \"%s %s %s %d %s \"%s\" %s\"\n",
 			param.ClientIP,
@@ -36,36 +36,47 @@ func SetupRouter(ctx context.Context, cfg *config.Config, db *pgxpool.Pool) *gin
 	}))
 	r.Use(gin.Recovery())
 
+	// CORS для cookie-auth
 	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowAllOrigins = true
-	//corsConfig.AllowOrigins = []string{"*"}
+	corsConfig.AllowOrigins = []string{
+		"http://localhost:3000",
+		"http://127.0.0.1:3000",
+		"http://localhost:5173",
+		"http://127.0.0.1:5173",
+	}
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}
 	corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	corsConfig.AllowCredentials = true
 	r.Use(cors.New(corsConfig))
 
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "pong"})
-	})
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "pong"}) })
 
-	// --- repositories ---
 	userRepo := repository.NewUserRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
 
-	// --- services ---
 	userService := service.NewUserService(userRepo)
 	tokenService := service.NewTokenService(cfg)
 	authService := service.NewAuthService(userRepo, sessionRepo, tokenService, cfg)
 
-	// --- handlers ---
-	userHandler := v1.NewUserHandler(userService)
 	authHandler := v1.NewAuthHandler(authService)
+	userHandler := v1.NewUserHandler(userService)
+
+	eventRepo := repository.NewEventRepository(db)
+	regRepo := repository.NewRegistrationRepository(db)
+	notifRepo := repository.NewNotificationRepository(db)
+	reviewRepo := repository.NewReviewRepository(db)
+
+	volunteerService := service.NewVolunteerService(eventRepo, regRepo, notifRepo, reviewRepo)
+
+	eventHandler := v1.NewEventHandler(volunteerService)
+	volunteerHandler := v1.NewVolunteerHandler(volunteerService)
 
 	api := r.Group("/api/v1")
 	{
 		auth := api.Group("/auth")
 		{
-			auth.POST("/register", userHandler.Register)
+			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/refresh", authHandler.Refresh)
 		}
@@ -75,33 +86,67 @@ func SetupRouter(ctx context.Context, cfg *config.Config, db *pgxpool.Pool) *gin
 		{
 			users.GET("/me", userHandler.GetCurrentUser)
 			users.PUT("/me", userHandler.UpdateUser)
+
 			users.PUT("/me/password", userHandler.ChangePassword)
 
-			users.GET("", userHandler.GetUsers)        // admin only
-			users.GET("/:id", userHandler.GetUserByID) // self/admin
+			users.PUT("/password", userHandler.ChangePassword)
+
+			users.GET("", userHandler.GetUsers)
+
+			users.GET("/:id", userHandler.GetUserByID)
 		}
+		events := api.Group("/events")
+		{
+			events.GET("", eventHandler.ListEvents)
+			events.GET("/:id", eventHandler.GetEvent)
+
+			events.Use(authMiddleware(tokenService))
+			{
+				events.POST("/:id/signup", volunteerHandler.Signup)
+				events.POST("/:id/cancel", volunteerHandler.Cancel)
+				events.POST("/:id/reviews", volunteerHandler.LeaveReview)
+			}
+		}
+
+		me := api.Group("/me")
+		me.Use(authMiddleware(tokenService))
+		{
+			me.GET("/notifications", volunteerHandler.Notifications)
+			me.POST("/notifications/:id/read", volunteerHandler.MarkNotificationRead)
+
+			me.GET("/history", volunteerHandler.History)
+			me.GET("/stats", volunteerHandler.Stats)
+			me.GET("/rating", volunteerHandler.Rating)
+		}
+
 	}
 
-	_ = ctx
 	return r
 }
 
-// authMiddleware валидирует Bearer access token и кладёт user_id/roles/email в gin.Context.
 func authMiddleware(tokenSvc *service.TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		var tokenStr string
+
+		if v, err := c.Cookie("access_token"); err == nil && v != "" {
+			tokenStr = v
+		}
+
+		if tokenStr == "" {
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" {
+				parts := strings.SplitN(authHeader, " ", 2)
+				if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+					tokenStr = strings.TrimSpace(parts[1])
+				}
+			}
+		}
+
+		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, v1.ErrorResponse{Success: false, Error: "Unauthorized"})
 			return
 		}
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, v1.ErrorResponse{Success: false, Error: "Unauthorized"})
-			return
-		}
-
-		tokenStr := strings.TrimSpace(parts[1])
 		claims, err := tokenSvc.ValidateAccessToken(tokenStr)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, v1.ErrorResponse{Success: false, Error: "Unauthorized"})
@@ -111,6 +156,7 @@ func authMiddleware(tokenSvc *service.TokenService) gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("email", claims.Email)
 		c.Set("roles", claims.Roles)
+
 		c.Next()
 	}
 }
