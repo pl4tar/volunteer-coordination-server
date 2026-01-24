@@ -1,5 +1,42 @@
 basePath: /
 definitions:
+  repository.Event:
+    properties:
+      address:
+        type: string
+      capacity:
+        type: integer
+      category_id:
+        type: integer
+      created_at:
+        type: string
+      ends_at:
+        type: string
+      full_description:
+        type: string
+      id:
+        type: string
+      importance:
+        type: string
+      latitude:
+        type: number
+      longitude:
+        type: number
+      organizer_id:
+        type: string
+      participants_count:
+        type: integer
+      short_description:
+        type: string
+      starts_at:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
   v1.ChangePasswordRequest:
     properties:
       current_password:
@@ -59,6 +96,16 @@ definitions:
     - email
     - full_name
     - password
+    type: object
+  v1.ReviewRequest:
+    properties:
+      comment:
+        type: string
+      rating:
+        type: integer
+    required:
+    - comment
+    - rating
     type: object
   v1.SessionDTO:
     properties:
@@ -228,18 +275,19 @@ paths:
       consumes:
       - application/json
       description: Возвращает список всех пользователей (только для администраторов)
+        с пагинацией и необязательным фильтром по роли.
       parameters:
       - default: 1
-        description: Номер страницы
+        description: Номер страницы (>= 1)
         in: query
         name: page
         type: integer
       - default: 20
-        description: Количество записей на странице
+        description: Количество записей на странице (1..200)
         in: query
         name: limit
         type: integer
-      - description: Фильтр по роли
+      - description: 'Фильтр по роли (например: admin, volunteer, user)'
         in: query
         name: role
         type: string
@@ -400,6 +448,337 @@ paths:
       summary: Сменить пароль
       tags:
       - users
+  /events:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает список доступных мероприятий с фильтрами
+      parameters:
+      - description: Дата/время начала (RFC3339), starts_at >= from
+        in: query
+        name: from
+        type: string
+      - description: Дата/время конца (RFC3339), starts_at <= to
+        in: query
+        name: to
+        type: string
+      - description: Город/место (поиск по address ILIKE)
+        in: query
+        name: city
+        type: string
+      - description: ID категории
+        in: query
+        name: category_id
+        type: integer
+      - description: Статус мероприятия
+        enum:
+        - active
+        - cancelled
+        - draft
+        in: query
+        name: status
+        type: string
+      - description: Поиск по title/description
+        in: query
+        name: q
+        type: string
+      - default: 1
+        description: Страница
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Лимит
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: items,total,page,limit
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Список мероприятий
+      tags:
+      - events
+  /events/{id}:
+    get:
+      parameters:
+      - description: Event ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/repository.Event'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Детальная информация о мероприятии
+      tags:
+      - events
+  /events/{id}/cancel:
+    post:
+      parameters:
+      - description: Event ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Отменить заявку на участие
+      tags:
+      - events
+  /events/{id}/reviews:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Event ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Оценка и комментарий
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.ReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: success
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Оставить отзыв о мероприятии
+      tags:
+      - events
+  /events/{id}/signup:
+    post:
+      parameters:
+      - description: Event ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Записаться на мероприятие
+      tags:
+      - events
+  /me/history:
+    get:
+      parameters:
+      - default: 1
+        description: Страница
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Лимит
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: items,total,page,limit
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: История участия
+      tags:
+      - me
+  /me/notifications:
+    get:
+      parameters:
+      - default: false
+        description: Только непрочитанные
+        in: query
+        name: unread
+        type: boolean
+      - default: 50
+        description: Лимит
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: items
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Получить уведомления
+      tags:
+      - me
+  /me/notifications/{id}/read:
+    post:
+      parameters:
+      - description: Notification ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Отметить уведомление прочитанным
+      tags:
+      - me
+  /me/rating:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Рейтинг волонтёра
+      tags:
+      - me
+  /me/stats:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Статистика активности
+      tags:
+      - me
 schemes:
 - http
 securityDefinitions:
