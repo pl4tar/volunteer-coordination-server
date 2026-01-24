@@ -37,6 +37,24 @@ definitions:
       updated_at:
         type: string
     type: object
+  v1.AdminSettingsResponse:
+    properties:
+      key:
+        type: string
+      success:
+        type: boolean
+      value:
+        additionalProperties: true
+        type: object
+    type: object
+  v1.AdminStatsResponse:
+    properties:
+      data:
+        additionalProperties: true
+        type: object
+      success:
+        type: boolean
+    type: object
   v1.ChangePasswordRequest:
     properties:
       current_password:
@@ -156,6 +174,49 @@ definitions:
       updated_at:
         type: string
     type: object
+  v1.createCategoryRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+    required:
+    - name
+    - slug
+    type: object
+  v1.createTagRequest:
+    properties:
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  v1.decideOrganizerVerificationRequest:
+    properties:
+      approve:
+        type: boolean
+      note:
+        type: string
+    type: object
+  v1.moderateEventRequest:
+    properties:
+      note:
+        type: string
+      status:
+        type: string
+    required:
+    - status
+    type: object
+  v1.setSettingsRequest:
+    properties:
+      value:
+        additionalProperties: {}
+        type: object
+    required:
+    - value
+    type: object
 host: localhost:4949
 info:
   contact: {}
@@ -166,6 +227,503 @@ info:
   title: Volunteer Coordination Server API
   version: "1.0"
 paths:
+  /admin/categories:
+    get:
+      description: Возвращает список категорий мероприятий. Доступно только администратору.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success,items
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Список категорий
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      description: Создает новую категорию (name, slug, description). Доступно только
+        администратору.
+      parameters:
+      - description: Category payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.createCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: success,id
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Создать категорию
+      tags:
+      - admin
+  /admin/categories/{id}:
+    delete:
+      description: Удаляет категорию по ID. Доступно только администратору.
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Удалить категорию
+      tags:
+      - admin
+  /admin/events/{id}/moderate:
+    post:
+      consumes:
+      - application/json
+      description: 'Меняет статус мероприятия (например: active/rejected/pending_moderation)
+        и пишет лог модерации. Доступно только администратору.'
+      parameters:
+      - description: Event ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Moderation payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.moderateEventRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Модерировать мероприятие (изменить статус)
+      tags:
+      - admin
+  /admin/organizer/verifications:
+    get:
+      description: Возвращает список заявок на организатора с фильтрацией по статусу
+        и пагинацией. Доступно только администратору.
+      parameters:
+      - description: Status filter
+        enum:
+        - pending
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success,items,total,page,limit
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Список заявок на статус организатора
+      tags:
+      - admin
+  /admin/organizer/verifications/{userId}/decide:
+    post:
+      consumes:
+      - application/json
+      description: Approve/reject заявки на статус организатора. При approve — выдаёт
+        роль organizer. Доступно только администратору.
+      parameters:
+      - description: User ID (UUID)
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: Decision payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.decideOrganizerVerificationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Принять решение по заявке организатора
+      tags:
+      - admin
+  /admin/settings/{key}:
+    get:
+      description: Возвращает значение настройки по ключу (jsonb). Доступно только
+        администратору.
+      parameters:
+      - description: Setting key
+        in: path
+        name: key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.AdminSettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Получить системную настройку
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      description: Создает/обновляет настройку по ключу (jsonb). Доступно только администратору.
+      parameters:
+      - description: Setting key
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: Settings payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.setSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Установить системную настройку
+      tags:
+      - admin
+  /admin/stats:
+    get:
+      description: 'Возвращает агрегированную статистику: users/events/active volunteers
+        и т.д. Доступно только администратору.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.AdminStatsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Общая статистика системы
+      tags:
+      - admin
+  /admin/tags:
+    get:
+      description: Возвращает список тегов мероприятий. Доступно только администратору.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success,items
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Список тегов
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      description: Создает новый тег. Доступно только администратору.
+      parameters:
+      - description: Tag payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.createTagRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: success,id
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Создать тег
+      tags:
+      - admin
+  /admin/tags/{id}:
+    delete:
+      description: Удаляет тег по ID. Доступно только администратору.
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Удалить тег
+      tags:
+      - admin
+  /admin/users/{id}/block:
+    post:
+      description: Блокирует учетную запись пользователя (is_blocked=true). Доступно
+        только администратору.
+      parameters:
+      - description: User ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Заблокировать пользователя
+      tags:
+      - admin
+  /admin/users/{id}/unblock:
+    post:
+      description: Снимает блокировку учетной записи пользователя (is_blocked=false).
+        Доступно только администратору.
+      parameters:
+      - description: User ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Разблокировать пользователя
+      tags:
+      - admin
   /api/v1/auth/login:
     post:
       consumes:
@@ -733,6 +1291,30 @@ paths:
       summary: Отметить уведомление прочитанным
       tags:
       - me
+  /me/organizer/request:
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Подать заявку на статус организатора
+      tags:
+      - organizer
   /me/rating:
     get:
       produces:
@@ -779,6 +1361,132 @@ paths:
       summary: Статистика активности
       tags:
       - me
+  /organizer/events:
+    get:
+      parameters:
+      - description: Статус
+        enum:
+        - active
+        - cancelled
+        - draft
+        - pending_moderation
+        - rejected
+        - finished
+        in: query
+        name: status
+        type: string
+      - default: 1
+        description: Страница
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Лимит
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success,items,total,page,limit
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Список моих мероприятий (организатор)
+      tags:
+      - organizer
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: success,id
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Создать мероприятие (организатор)
+      tags:
+      - organizer
+  /organizer/events/{id}:
+    delete:
+      parameters:
+      - description: Event ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SuccessResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Удалить (отменить) мероприятие (организатор)
+      tags:
+      - organizer
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Event ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Редактировать мероприятие (организатор)
+      tags:
+      - organizer
 schemes:
 - http
 securityDefinitions:

@@ -4,6 +4,8 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -29,6 +31,34 @@ func CheckAndMigrate(db *pgxpool.Pool) error {
 	//	}
 	//}
 
+	return nil
+}
+
+func RunSeedMigration(ctx context.Context, db *pgxpool.Pool) error {
+	// путь подстрой под свою структуру проекта/контейнера
+	const seedPath = "./internal/storage/002_seed.sql"
+
+	if err := ExecSQLFile(ctx, db, seedPath); err != nil {
+		return fmt.Errorf("seed migration failed: %w", err)
+	}
+	return nil
+}
+
+func ExecSQLFile(ctx context.Context, db *pgxpool.Pool, path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read sql file %s: %w", path, err)
+	}
+
+	sql := strings.TrimSpace(string(b))
+	if sql == "" {
+		return nil
+	}
+
+	_, err = db.Exec(ctx, sql)
+	if err != nil {
+		return fmt.Errorf("exec sql file %s: %w", path, err)
+	}
 	return nil
 }
 

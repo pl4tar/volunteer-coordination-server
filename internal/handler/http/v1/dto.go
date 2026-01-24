@@ -2,6 +2,7 @@ package v1
 
 import (
 	"time"
+	"volunteer-coordination-server/internal/domain"
 
 	"github.com/google/uuid"
 )
@@ -91,4 +92,46 @@ type ErrorResponse struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error"`
 	Details string `json:"details,omitempty"`
+}
+
+// org DTOs
+
+type EventUpsertRequest domain.EventUpsert
+
+type decideRegistrationRequest struct {
+	Status string `json:"status" binding:"required"` // confirmed|rejected|attended|no_show
+}
+
+type notifyRequest struct {
+	Type    string         `json:"type" binding:"required"`
+	Payload map[string]any `json:"payload" binding:"required"`
+}
+
+type scoreRequest struct {
+	Score   int    `json:"score" binding:"required"` // 0..100
+	Comment string `json:"comment,omitempty"`
+}
+
+type organizerRequest struct {
+	CompanyName string         `json:"company_name,omitempty"`
+	Documents   map[string]any `json:"documents,omitempty"`
+}
+
+// AdminStatsResponse swagger response
+type AdminStatsResponse struct {
+	Success bool                   `json:"success"`
+	Data    map[string]interface{} `json:"data"`
+}
+
+// AdminSettingsResponse swagger response
+type AdminSettingsResponse struct {
+	Success bool                   `json:"success"`
+	Key     string                 `json:"key"`
+	Value   map[string]interface{} `json:"value"`
+}
+
+// AdminListResponse swagger response for lists
+type AdminListResponse[T any] struct {
+	Success bool `json:"success"`
+	Items   []T  `json:"items"`
 }
