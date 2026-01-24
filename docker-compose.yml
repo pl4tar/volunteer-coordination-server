@@ -1,0 +1,50 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: volunteer-coordination-server
+    ports:
+      - "4949:4949"
+    environment:
+      API_PORT: "4949"
+      CONFIG_PATH: /app/config/config.yml
+
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: postgres
+      DB_USERNAME: postgres
+      DB_PASSWORD: 8967451230
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - volunteer-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17.7-alpine
+    container_name: volunteer-db
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 8967451230
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./internal/storage/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - volunteer-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+volumes:
+  postgres_data:
+
+networks:
+  volunteer-network:
+    driver: bridge
