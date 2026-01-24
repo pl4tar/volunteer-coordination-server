@@ -488,9 +488,6 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 // @Param page query int false "Номер страницы (>= 1)" default(1)
 // @Param limit query int false "Количество записей на странице (1..200)" default(20)
 // @Param role query string false "Фильтр по роли (например: admin, volunteer, user)"
-// @Param X-Total-Count header int true "Общее количество пользователей с учётом фильтра"
-// @Param X-Page header int true "Текущая страница"
-// @Param X-Limit header int true "Лимит на страницу"
 // @Success 200 {array} UserResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse

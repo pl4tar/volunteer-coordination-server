@@ -43,3 +43,29 @@ type SessionRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (domain.Session, error)
 	DeleteExpired(ctx context.Context) error
 }
+
+// EventRepository интерфейс для мероприятий
+type EventRepository interface {
+	List(ctx context.Context, q EventListQuery) ([]Event, int, error)
+	GetByID(ctx context.Context, id uuid.UUID) (Event, error)
+}
+
+// RegistrationRepository интерфейс для заявок
+type RegistrationRepository interface {
+	UpsertApplied(ctx context.Context, eventID, userID uuid.UUID) error
+	Cancel(ctx context.Context, eventID, userID uuid.UUID) error
+	CountConfirmed(ctx context.Context, eventID uuid.UUID) (int, error)
+	History(ctx context.Context, userID uuid.UUID, limit, offset int) ([]HistoryItem, int, error)
+}
+
+// NotificationRepository интерфейс для уведомлений
+type NotificationRepository interface {
+	List(ctx context.Context, userID uuid.UUID, onlyUnread bool, limit int) ([]Notification, error)
+	Create(ctx context.Context, n Notification) error
+	MarkRead(ctx context.Context, userID, notificationID uuid.UUID) error
+}
+
+// ReviewRepository интерфейс для отзывов
+type ReviewRepository interface {
+	Create(ctx context.Context, eventID, userID uuid.UUID, rating int16, comment string) error
+}

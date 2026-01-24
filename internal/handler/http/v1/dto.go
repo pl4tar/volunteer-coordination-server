@@ -68,6 +68,19 @@ type RefreshTokenResponse struct {
 	ExpiresIn    int    `json:"expires_in"`
 }
 
+// Events DTOs
+type EventListResponse struct {
+	Items []any `json:"items"`
+	Total int   `json:"total"`
+	Page  int   `json:"page"`
+	Limit int   `json:"limit"`
+}
+
+type ReviewRequest struct {
+	Rating  int16  `json:"rating" binding:"required"`
+	Comment string `json:"comment" binding:"required"`
+}
+
 // Helper DTOs
 type SuccessResponse struct {
 	Success bool   `json:"success"`

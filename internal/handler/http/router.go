@@ -62,6 +62,16 @@ func SetupRouter(_ context.Context, cfg *config.Config, db *pgxpool.Pool) *gin.E
 	authHandler := v1.NewAuthHandler(authService)
 	userHandler := v1.NewUserHandler(userService)
 
+	eventRepo := repository.NewEventRepository(db)
+	regRepo := repository.NewRegistrationRepository(db)
+	notifRepo := repository.NewNotificationRepository(db)
+	reviewRepo := repository.NewReviewRepository(db)
+
+	volunteerService := service.NewVolunteerService(eventRepo, regRepo, notifRepo, reviewRepo)
+
+	eventHandler := v1.NewEventHandler(volunteerService)
+	volunteerHandler := v1.NewVolunteerHandler(volunteerService)
+
 	api := r.Group("/api/v1")
 	{
 		auth := api.Group("/auth")
@@ -79,13 +89,36 @@ func SetupRouter(_ context.Context, cfg *config.Config, db *pgxpool.Pool) *gin.E
 
 			users.PUT("/me/password", userHandler.ChangePassword)
 
-			// Алиас, чтобы /users/password тоже работал (и не попадал в /:id)
 			users.PUT("/password", userHandler.ChangePassword)
 
 			users.GET("", userHandler.GetUsers)
 
 			users.GET("/:id", userHandler.GetUserByID)
 		}
+		events := api.Group("/events")
+		{
+			events.GET("", eventHandler.ListEvents)
+			events.GET("/:id", eventHandler.GetEvent)
+
+			events.Use(authMiddleware(tokenService))
+			{
+				events.POST("/:id/signup", volunteerHandler.Signup)
+				events.POST("/:id/cancel", volunteerHandler.Cancel)
+				events.POST("/:id/reviews", volunteerHandler.LeaveReview)
+			}
+		}
+
+		me := api.Group("/me")
+		me.Use(authMiddleware(tokenService))
+		{
+			me.GET("/notifications", volunteerHandler.Notifications)
+			me.POST("/notifications/:id/read", volunteerHandler.MarkNotificationRead)
+
+			me.GET("/history", volunteerHandler.History)
+			me.GET("/stats", volunteerHandler.Stats)
+			me.GET("/rating", volunteerHandler.Rating)
+		}
+
 	}
 
 	return r
