@@ -17,4 +17,5 @@ go get github.com/swaggo/files
 ```
 swag --version
 swag init -g cmd/app/main.go
+
 ```
