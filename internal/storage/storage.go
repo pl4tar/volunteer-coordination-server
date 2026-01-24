@@ -44,6 +44,10 @@ func NewConnection(ctx context.Context, cfg *config.Config) *pgxpool.Pool {
 		panic(err)
 	}
 
+	//if err := RunSeedMigration(ctx, conn); err != nil {
+	//	panic(err)
+	//}
+
 	slog.Info("DB connected")
 
 	return conn

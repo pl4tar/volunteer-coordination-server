@@ -51,7 +51,6 @@ func (h *UserHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Если роли не указаны volunteer по умолчанию
 	if len(req.Roles) == 0 {
 		req.Roles = []string{"volunteer"}
 	}
@@ -141,7 +140,6 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 
 	userIDStr := c.Param("id")
 
-	// Валидируем UUID
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		slog.Warn("invalid UUID format",
@@ -154,7 +152,6 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 		return
 	}
 
-	// Получаем текущего пользователя из контекста (для проверки прав)
 	currentUserID, exists := c.Get("user_id")
 	if !exists {
 		slog.Warn("user ID not found in context",
@@ -179,7 +176,6 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 		return
 	}
 
-	// Проверка прав доступа
 	if currentUser.ID != userID && !currentUser.IsAdmin() {
 		slog.Warn("unauthorized access to user data",
 			slog.String("op", op),
@@ -192,7 +188,6 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 		return
 	}
 
-	// Получаем пользователя
 	user, err := h.userService.UserByParam(c.Request.Context(), "id", userID.String())
 	if err != nil {
 		switch {
@@ -219,7 +214,6 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 		}
 	}
 
-	// Формируем ответ
 	response := UserResponse{
 		ID:        user.ID,
 		Email:     user.Email,
@@ -248,7 +242,6 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 func (h *UserHandler) GetCurrentUser(c *gin.Context) {
 	const op = "handler.UserHandler.GetCurrentUser"
 
-	// Получаем user_id из контекста (устанавливается middleware)
 	userID, exists := c.Get("user_id")
 	if !exists {
 		slog.Warn("user ID not found in context",
@@ -304,7 +297,6 @@ func (h *UserHandler) GetCurrentUser(c *gin.Context) {
 func (h *UserHandler) UpdateUser(c *gin.Context) {
 	const op = "handler.UserHandler.UpdateUser"
 
-	// Получаем user_id из контекста
 	userID, exists := c.Get("user_id")
 	if !exists {
 		slog.Warn("user ID not found in context",
@@ -328,7 +320,6 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	// Получаем пользователя
 	user, err := h.userService.UserByParam(c.Request.Context(), "id", userID.(string))
 
 	if err != nil {
@@ -343,10 +334,8 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	// Обновляем данные
 	user.UpdateProfile(req.FullName, req.Phone)
 
-	// Сохраняем изменения через сервис
 	updatedUser, err := h.userService.UpdateUser(c.Request.Context(), user)
 	if err != nil {
 		slog.Error("failed to update user",
@@ -360,7 +349,6 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	// Формируем ответ
 	response := UserResponse{
 		ID:        updatedUser.ID,
 		Email:     updatedUser.Email,
@@ -395,7 +383,6 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 func (h *UserHandler) ChangePassword(c *gin.Context) {
 	const op = "handler.UserHandler.ChangePassword"
 
-	// 1) user_id из контекста (его должен класть auth middleware)
 	userIDVal, exists := c.Get("user_id")
 	if !exists {
 		slog.Warn("user ID not found in context", slog.String("op", op))
@@ -422,7 +409,6 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	// 2) JSON body
 	var req ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Warn("invalid password change request",
@@ -436,7 +422,6 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	// (не обязательно, но полезно) минимальная валидация без смены стиля
 	if req.CurrentPassword == "" || req.NewPassword == "" {
 		slog.Warn("empty password fields",
 			slog.String("op", op),
@@ -497,7 +482,6 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 func (h *UserHandler) GetUsers(c *gin.Context) {
 	const op = "handler.UserHandler.GetUsers"
 
-	// 1) user_id из контекста
 	userIDVal, exists := c.Get("user_id")
 	if !exists {
 		slog.Warn("user ID not found in context", slog.String("op", op))
@@ -514,7 +498,6 @@ func (h *UserHandler) GetUsers(c *gin.Context) {
 		return
 	}
 
-	// 2) Проверка админа: сначала по ролям из JWT (быстро и правильно)
 	isAdmin := false
 
 	if rolesVal, ok := c.Get("roles"); ok {
@@ -541,7 +524,6 @@ func (h *UserHandler) GetUsers(c *gin.Context) {
 		}
 	}
 
-	// 3) Fallback: если roles не прокинуты middleware — проверим через БД по UUID
 	if !isAdmin {
 		id, err := uuid.Parse(userIDStr)
 		if err != nil {
@@ -553,7 +535,6 @@ func (h *UserHandler) GetUsers(c *gin.Context) {
 			return
 		}
 
-		// ВАЖНО: поправил порядок аргументов как в твоём сервисе: (param, value)
 		currentUser, err := h.userService.UserByParam(c.Request.Context(), "id", id.String())
 		if err != nil {
 			slog.Error("failed to get current user for admin check",
@@ -575,7 +556,6 @@ func (h *UserHandler) GetUsers(c *gin.Context) {
 		return
 	}
 
-	// 4) Параметры списка + мягкая валидация
 	pageStr := c.DefaultQuery("page", "1")
 	limitStr := c.DefaultQuery("limit", "20")
 	role := c.Query("role")

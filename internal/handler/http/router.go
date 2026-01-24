@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"volunteer-coordination-server/internal/middleware"
 
 	"volunteer-coordination-server/config"
 	v1 "volunteer-coordination-server/internal/handler/http/v1"
@@ -72,8 +73,66 @@ func SetupRouter(_ context.Context, cfg *config.Config, db *pgxpool.Pool) *gin.E
 	eventHandler := v1.NewEventHandler(volunteerService)
 	volunteerHandler := v1.NewVolunteerHandler(volunteerService)
 
+	modRepo := repository.NewModerationRepository(db)
+	catRepo := repository.NewCategoryRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	statsRepo := repository.NewStatsRepository(db)
+	setRepo := repository.NewSettingsRepository(db)
+	verifyRepo := repository.NewOrganizerVerificationRepository(db)
+
+	adminService := service.NewAdminService(userRepo, modRepo, catRepo, tagRepo, statsRepo, setRepo, verifyRepo)
+	adminHandler := v1.NewAdminHandler(adminService)
+
+	orgEventRepo := repository.NewOrganizerEventRepository(db)
+	organizerService := service.NewOrganizerService(orgEventRepo)
+
+	organizerHandler := v1.NewOrganizerHandler(organizerService, adminService)
+
 	api := r.Group("/api/v1")
 	{
+		organizer := api.Group("/organizer")
+		organizer.Use(authMiddleware(tokenService))
+		{
+			organizer.GET("/events", organizerHandler.ListMyEvents)
+			organizer.POST("/events", organizerHandler.CreateEvent)
+			organizer.PUT("/events/:id", organizerHandler.UpdateEvent)
+			organizer.DELETE("/events/:id", organizerHandler.DeleteEvent)
+
+			//organizer.GET("/events/:id/registrations", organizerHandler.ListRegistrations)
+			//organizer.POST("/events/:id/registrations/:userId", organizerHandler.DecideRegistration)
+			//
+			//organizer.POST("/events/:id/notify", organizerHandler.Notify)
+			//organizer.POST("/events/:id/participants/:userId/score", organizerHandler.UpsertScore)
+			//
+			//organizer.GET("/stats", organizerHandler.Stats)
+		}
+
+		admin := api.Group("/admin")
+		admin.Use(authMiddleware(tokenService), middleware.RequireRole("admin"))
+		{
+			admin.POST("/users/:id/block", adminHandler.BlockUser)
+			admin.POST("/users/:id/unblock", adminHandler.UnblockUser)
+			//admin.DELETE("/users/:id", adminHandler.DeleteUser)
+
+			admin.POST("/events/:id/moderate", adminHandler.ModerateEvent)
+
+			admin.GET("/categories", adminHandler.ListCategories)
+			admin.POST("/categories", adminHandler.CreateCategory)
+			admin.DELETE("/categories/:id", adminHandler.DeleteCategory)
+
+			admin.GET("/tags", adminHandler.ListTags)
+			admin.POST("/tags", adminHandler.CreateTag)
+			admin.DELETE("/tags/:id", adminHandler.DeleteTag)
+
+			admin.GET("/stats", adminHandler.Stats)
+
+			admin.GET("/settings/:key", adminHandler.GetSettings)
+			admin.PUT("/settings/:key", adminHandler.SetSettings)
+
+			admin.GET("/organizer/verifications", adminHandler.ListOrganizerVerifications)
+			admin.POST("/organizer/verifications/:userId/decide", adminHandler.DecideOrganizerVerification)
+		}
+
 		auth := api.Group("/auth")
 		{
 			auth.POST("/register", authHandler.Register)

@@ -14,6 +14,7 @@ var (
 	ErrAlreadyExists = errors.New("already exists")
 )
 
+// UserRepository интерфейс для работы с пользователями
 type UserRepository interface {
 	Save(ctx context.Context, user domain.User) (uuid.UUID, error)
 	QueryGetUserByEmail(ctx context.Context, email string) (domain.User, error)
@@ -68,4 +69,144 @@ type NotificationRepository interface {
 // ReviewRepository интерфейс для отзывов
 type ReviewRepository interface {
 	Create(ctx context.Context, eventID, userID uuid.UUID, rating int16, comment string) error
+}
+
+// OrganizerEventRepository
+//
+// Отвечает ТОЛЬКО за работу организатора со своими мероприятиями.
+// Никакой бизнес-логики, только доступ к данным.
+//
+// Основные инварианты:
+//   - Организатор может работать ТОЛЬКО со своими событиями
+//   - Удаление является soft-delete (deleted_at + status=cancelled)
+//   - Любое изменение active-события возвращает его в pending_moderation
+type OrganizerEventRepository interface {
+
+	// Create создает новое мероприятие от имени организатора.
+	//
+	// Поведение:
+	//   - organizerID — идентификатор пользователя-организатора
+	//   - статус события всегда выставляется в `pending_moderation`
+	//   - created_at / updated_at выставляются на уровне БД
+	//   - теги (tag_ids) добавляются в таблицу event_tags, если они переданы
+	//
+	// Возвращает:
+	//   - uuid созданного события
+	//   - ошибку БД при неуспехе
+	//
+	Create(
+		ctx context.Context,
+		organizerID uuid.UUID,
+		event domain.EventUpsert,
+	) (uuid.UUID, error)
+
+	// Update обновляет мероприятие, принадлежащее организатору.
+	//
+	// Правила:
+	//   - обновление возможно ТОЛЬКО если event принадлежит organizerID
+	//   - deleted_at IS NULL
+	//   - если статус события был `active`, он переводится в `pending_moderation`
+	//
+	// Частичное обновление:
+	//   - поля, равные nil / zero-value (в зависимости от DTO), НЕ изменяются
+	//   - TagIDs:
+	//       nil  -> не трогаем теги
+	//       []   -> очищаем все теги
+	//       [..] -> заменяем набор тегов
+	//
+	// Возвращает:
+	//   - ErrNotFound, если событие не найдено или не принадлежит организатору
+	//   - ошибку БД при неуспехе
+	//
+	Update(
+		ctx context.Context,
+		organizerID uuid.UUID,
+		eventID uuid.UUID,
+		event domain.EventUpsert,
+	) error
+
+	// SoftDelete выполняет мягкое удаление мероприятия.
+	//
+	// Поведение:
+	//   - выставляет deleted_at = now()
+	//   - выставляет status = 'cancelled'
+	//   - обновляет updated_at
+	//   - операция идемпотентна (повторный вызов вернет ErrNotFound)
+	//
+	// Дополнительно (best-effort):
+	//   - может отправлять уведомление участникам через DB-функцию
+	//     notify_event_participants(...)
+	//
+	// Возвращает:
+	//   - ErrNotFound, если событие не найдено или не принадлежит организатору
+	//   - ошибку БД при неуспехе
+	//
+	SoftDelete(
+		ctx context.Context,
+		organizerID uuid.UUID,
+		eventID uuid.UUID,
+	) error
+
+	// ListByOrganizer возвращает список мероприятий конкретного организатора
+	// с поддержкой фильтрации и пагинации (кабинет организатора).
+	//
+	// Фильтры (см. EventListQuery):
+	//   - статус события
+	//   - диапазон дат
+	//   - категория
+	//
+	// Пагинация:
+	//   - Page (1-based)
+	//   - Limit
+	//
+	// Возвращает:
+	//   - список событий
+	//   - общее количество (для фронта)
+	//   - ошибку БД при неуспехе
+	//
+	ListByOrganizer(
+		ctx context.Context,
+		organizerID uuid.UUID,
+		query EventListQuery,
+	) (events []Event, total int, err error)
+}
+
+// ModerationRepository — модерация (в первую очередь мероприятий).
+type ModerationRepository interface {
+	// SetEventStatus меняет статус события (active/rejected/pending_moderation/...)
+	// + пишет запись в moderation_logs.
+	SetEventStatus(ctx context.Context, adminID, eventID uuid.UUID, status string, details map[string]any) error
+}
+
+// CategoryRepository — управление категориями мероприятий.
+type CategoryRepository interface {
+	List(ctx context.Context) ([]domain.Category, error)
+	Create(ctx context.Context, name, slug, description string) (int, error)
+	Delete(ctx context.Context, id int) error
+}
+
+// TagRepository — управление тегами мероприятий.
+type TagRepository interface {
+	List(ctx context.Context) ([]domain.Tag, error)
+	Create(ctx context.Context, name string) (int, error)
+	Delete(ctx context.Context, id int) error
+}
+
+// SettingsRepository — системные настройки/интеграции (jsonb).
+type SettingsRepository interface {
+	Get(ctx context.Context, key string) (map[string]any, error)
+	Set(ctx context.Context, key string, value map[string]any) error
+}
+
+// StatsRepository — статистика системы/организатора.
+type StatsRepository interface {
+	SystemStats(ctx context.Context) (map[string]any, error)
+	OrganizerStats(ctx context.Context, organizerID uuid.UUID) (map[string]any, error)
+}
+
+// OrganizerVerificationRepository — заявки на статус организатора (pending/approved/rejected).
+type OrganizerVerificationRepository interface {
+	Request(ctx context.Context, userID uuid.UUID, companyName string, documents map[string]any) error
+	List(ctx context.Context, status string, limit, offset int) ([]domain.OrganizerVerification, int, error)
+	Decide(ctx context.Context, adminID, userID uuid.UUID, approve bool, note string) error
 }
