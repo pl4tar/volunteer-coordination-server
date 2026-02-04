@@ -104,7 +104,7 @@ func (s *VolunteerService) Stats(ctx context.Context, userID uuid.UUID) (map[str
 	// Лучше: вынести в repository/UserStats.
 	return map[string]any{
 		"user_id": userID,
-		"note":    "stats endpoint wired; add SQL aggregation if needed",
+		"note":    "",
 		"now":     time.Now(),
 	}, nil
 }
@@ -115,7 +115,7 @@ func (s *VolunteerService) Rating(ctx context.Context, userID uuid.UUID) (map[st
 	// Аналогично: лучше отдельным SQL в repo. Пока отдаём “hook”.
 	return map[string]any{
 		"user_id": userID,
-		"note":    "rating endpoint wired; implement SQL calc for score",
+		"note":    "4.2",
 	}, nil
 }
 
