@@ -265,14 +265,16 @@ func (h *UserHandler) GetCurrentUser(c *gin.Context) {
 		})
 		return
 	}
-
-	// Формируем ответ
+	roles := make([]string, 0, len(user.Roles))
+	for _, r := range user.Roles {
+		roles = append(roles, r.Role)
+	}
 	response := UserResponse{
 		ID:        user.ID,
 		Email:     user.Email,
 		FullName:  user.FullName,
 		Phone:     user.Phone,
-		Roles:     user.GetRoles(),
+		Roles:     roles,
 		IsBlocked: user.IsBlocked,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,

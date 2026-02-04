@@ -19,6 +19,7 @@ type UserRepository interface {
 	Save(ctx context.Context, user domain.User) (uuid.UUID, error)
 	QueryGetUserByEmail(ctx context.Context, email string) (domain.User, error)
 	QueryGetUserByID(ctx context.Context, userID uuid.UUID) (domain.User, error)
+	//GetUserRoleByID(ctx context.Context, userID uuid.UUID) (domain.UserRole, error)
 
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 	ListUsers(ctx context.Context, page, limit int, roleFilter string) ([]domain.User, int64, error)

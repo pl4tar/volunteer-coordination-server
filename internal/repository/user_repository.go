@@ -200,33 +200,41 @@ func (r *userRepository) QueryGetUserByID(ctx context.Context, id uuid.UUID) (do
 		WHERE id = $1
 	`
 
-	var (
-		user  domain.User
-		phone sql.NullString
-	)
+	user := domain.User{}
+
+	var phone sql.NullString
 
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&user.ID,
 		&user.Email,
 		&user.Password,
 		&user.FullName,
-		&phone, // <-- сюда
+		&phone,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.IsBlocked,
 	)
 	if err != nil {
-		slog.Error("failed to get user by ID",
-			slog.String("op", op),
-			slog.String("user_id", id.String()),
-			slog.Any("error", err))
+		if errors.Is(err, pgx.ErrNoRows) {
+			slog.Warn("user not found by email", slog.String("op", op), slog.Any("id", id))
+			return domain.User{}, fmt.Errorf("%s: user not found", op)
+		}
+
+		slog.Error("failed to get user by email", slog.String("op", op), slog.Any("id", id), slog.Any("error", err))
 		return domain.User{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if phone.Valid {
 		user.Phone = phone.String
 	} else {
-		user.Phone = ""
+		user.Phone = "" // или оставь как есть, если у тебя Phone string
+	}
+
+	roles, err := r.GetUserRoles(ctx, user.ID)
+	if err != nil {
+		slog.Error("failed to get user roles", slog.String("op", op), slog.String("user_id", user.ID.String()), slog.Any("error", err))
+	} else {
+		user.Roles = roles
 	}
 
 	return user, nil
