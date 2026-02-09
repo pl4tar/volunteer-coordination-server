@@ -63,8 +63,6 @@ CREATE TABLE IF NOT EXISTS users
     password_hash    TEXT        NOT NULL,
     full_name        TEXT,
     phone            TEXT,
-    role             TEXT        NOT NULL DEFAULT 'volunteer'
-        CHECK (role IN ('volunteer', 'organizer', 'admin')),
     organizer_status TEXT        NOT NULL DEFAULT 'pending'
         CHECK (organizer_status IN ('pending', 'approved', 'rejected')),
     bio              TEXT,
