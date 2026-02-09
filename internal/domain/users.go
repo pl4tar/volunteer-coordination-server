@@ -33,6 +33,7 @@ type User struct {
 	IsBlocked bool       `json:"is_blocked,omitempty" db:"is_blocked"`
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+	Bio       string     `json:"bio,omitempty" db:"bio"`
 }
 
 type UserRegistration struct {

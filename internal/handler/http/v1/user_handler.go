@@ -278,6 +278,7 @@ func (h *UserHandler) GetCurrentUser(c *gin.Context) {
 		IsBlocked: user.IsBlocked,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
+		Bio:       user.Bio,
 	}
 
 	c.JSON(http.StatusOK, response)

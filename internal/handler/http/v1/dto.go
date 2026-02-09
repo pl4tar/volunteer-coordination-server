@@ -17,6 +17,7 @@ type UserResponse struct {
 	IsBlocked bool      `json:"is_blocked"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	Bio       string    `json:"bio,omitempty"`
 }
 
 type SuccessOnlyResponse struct {

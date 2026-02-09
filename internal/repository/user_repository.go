@@ -137,7 +137,8 @@ func (r *userRepository) QueryGetUserByEmail(ctx context.Context, email string) 
 			phone, 
 			created_at, 
 			updated_at, 
-			is_blocked
+			is_blocked,
+			COALESCE(bio, '')
 		FROM users 
 		WHERE email = $1
 	`
@@ -155,6 +156,7 @@ func (r *userRepository) QueryGetUserByEmail(ctx context.Context, email string) 
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.IsBlocked,
+		&user.Bio,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -195,7 +197,8 @@ func (r *userRepository) QueryGetUserByID(ctx context.Context, id uuid.UUID) (do
 			phone, 
 			created_at, 
 			updated_at, 
-			is_blocked
+			is_blocked,
+			COALESCE(bio, '')
 		FROM users 
 		WHERE id = $1
 	`
@@ -213,21 +216,22 @@ func (r *userRepository) QueryGetUserByID(ctx context.Context, id uuid.UUID) (do
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.IsBlocked,
+		&user.Bio,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Warn("user not found by email", slog.String("op", op), slog.Any("id", id))
+			slog.Warn("user not found by id", slog.String("op", op), slog.Any("id", id))
 			return domain.User{}, fmt.Errorf("%s: user not found", op)
 		}
 
-		slog.Error("failed to get user by email", slog.String("op", op), slog.Any("id", id), slog.Any("error", err))
+		slog.Error("failed to get user by id", slog.String("op", op), slog.Any("id", id), slog.Any("error", err))
 		return domain.User{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if phone.Valid {
 		user.Phone = phone.String
 	} else {
-		user.Phone = "" // или оставь как есть, если у тебя Phone string
+		user.Phone = ""
 	}
 
 	roles, err := r.GetUserRoles(ctx, user.ID)
