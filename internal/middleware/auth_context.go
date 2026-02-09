@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	v1 "volunteer-coordination-server/internal/handler/http/v1"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -34,23 +35,35 @@ func RequireActiveUser() gin.HandlerFunc {
 	}
 }
 
-func RequireRole(roles ...string) gin.HandlerFunc {
-	allowed := map[string]struct{}{}
-	for _, r := range roles {
-		allowed[r] = struct{}{}
-	}
+func RequireRole(required string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		roleAny, ok := c.Get(CtxRoleKey)
+		rolesVal, ok := c.Get("roles")
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "error": "forbidden"})
+			c.AbortWithStatusJSON(http.StatusForbidden, v1.ErrorResponse{Success: false, Error: "forbidden"})
 			return
 		}
-		role, _ := roleAny.(string)
-		if _, ok := allowed[role]; !ok {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "error": "forbidden"})
-			return
+
+		// ВАЖНО: у тебя roles кладутся как []string
+		switch roles := rolesVal.(type) {
+
+		case []string:
+			for _, r := range roles {
+				if r == required {
+					c.Next()
+					return
+				}
+			}
+
+		case []interface{}: // на всякий случай, если где-то роли приходят иначе
+			for _, it := range roles {
+				if s, ok := it.(string); ok && s == required {
+					c.Next()
+					return
+				}
+			}
 		}
-		c.Next()
+
+		c.AbortWithStatusJSON(http.StatusForbidden, v1.ErrorResponse{Success: false, Error: "forbidden"})
 	}
 }
 
